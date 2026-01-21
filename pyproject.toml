@@ -1,0 +1,70 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/"]
+
+[project]
+name = "signurlarity"
+description = "Lightweight library to presign URLs compatible with boto3"
+
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = []
+license = { text = "GPL-3.0-only" }
+dynamic = ["version"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Distributed Computing",
+]
+
+[project.urls]
+Homepage = "https://github.com/diracx/signurlarity"
+Repository = "https://github.com/diracx/signurlarity"
+
+
+[project.optional-dependencies]
+testing = ["pytest", "pytest-asyncio", "aiobotocore>=2.15", "botocore>=1.35", "moto[server]", "httpx","pytest-xdist"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[tool.pixi.environments]
+default = {features = [], solve-group = "default"}
+testing = {features = ["testing"], solve-group = "default"}
+pre-commit = {features = ["pre-commit"], no-default-feature = true}
+
+
+# Features for generating the documentation
+# [tool.pixi.feature.testing.dependencies]
+# python = "*"
+# kubernetes-helm = "*"
+[tool.pixi.feature.testing.pypi-dependencies]
+signurlarity = { path = ".", editable = true }
+[tool.pixi.feature.testing.tasks.pytest]
+cmd = "pytest"
+description = "Run pytest"
+
+# Features for running pre-commit hooks
+[tool.pixi.feature.pre-commit.dependencies]
+pre-commit = "*"
+[tool.pixi.feature.pre-commit.tasks]
+pre-commit = "pre-commit"
+description = "Run pre-commit hooks"
