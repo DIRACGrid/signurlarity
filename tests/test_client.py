@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import random
+import tempfile
 
 import httpx
 import pytest
@@ -11,8 +12,8 @@ import boto3
 from signurlarity import Client
 
 
-BUCKET_NAME = "test_bucket"
-OTHER_BUCKET_NAME = "other_bucket"
+BUCKET_NAME = "test-bucket"
+OTHER_BUCKET_NAME = "other-bucket"
 MISSING_BUCKET_NAME = "missing_bucket"
 INVALID_BUCKET_NAME = ".."
 
@@ -109,7 +110,7 @@ def test_generate_presigned_post(s3_clients):
 
     upload_info = light_client.generate_presigned_post(
         Bucket=BUCKET_NAME,
-        Key="myFile.txt",
+        Key=key,
         Fields=fields,
         Conditions=conditions,
         ExpiresIn=60,
@@ -124,3 +125,31 @@ def test_generate_presigned_post(s3_clients):
 
     assert r.status_code == 204, r.text
     boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+
+def test_generate_presigned_url(s3_clients):
+    """
+    Get a pre-signed URL with our client, upload with httpx
+    check it exists with boto
+    """
+    boto_client, light_client = s3_clients
+
+    file_content, checksum = _random_file(128)
+    key = f"{checksum}.dat"
+
+    response = boto_client.put_object(
+        Body=file_content, Bucket=BUCKET_NAME, Key=key, Metadata={"Checksum": checksum}
+    )
+
+    presigned_url = light_client.generate_presigned_url(
+        ClientMethod="get_object",
+        Params={"Bucket": BUCKET_NAME, "Key": key},
+        ExpiresIn=3600,
+    )
+
+    with tempfile.TemporaryFile(mode="w+b") as fh:
+        with httpx.Client() as http_client:
+            response = http_client.get(presigned_url)
+            response.raise_for_status()
+            for chunk in response.iter_bytes():
+                fh.write(chunk)
