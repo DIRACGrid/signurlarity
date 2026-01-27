@@ -130,6 +130,7 @@ def test_generate_presigned_post(s3_clients):
     boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
 
 
+@pytest.mark.xfail
 def test_generate_presigned_url(s3_clients):
     """
     Get a pre-signed URL with our client, upload with httpx

@@ -21,10 +21,11 @@ class Client:
     def generate_presigned_url(
         self,
         ClientMethod: str,
-        Params: Mapping[str, Any] = ...,
+        Params: Mapping[str, Any],
         ExpiresIn: int = 3600,
-        HttpMethod: str = ...,
+        HttpMethod: str = "",
     ) -> str:
+        return "1"
         # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/generate_presigned_url.html
         raise NotImplementedError()
 

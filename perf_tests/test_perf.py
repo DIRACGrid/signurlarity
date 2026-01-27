@@ -153,7 +153,7 @@ def test_generate_presigned_url_perf(moto_server, perf_test_dir):
 
     for _ in range(50):
         light_client.generate_presigned_url(
-            bucket=bucket, key=key, method="GET", expires=60
+            "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=60
         )
 
     def run_boto(n: int):
@@ -168,10 +168,9 @@ def test_generate_presigned_url_perf(moto_server, perf_test_dir):
     def run_custom(n: int):
         for _ in range(n):
             light_client.generate_presigned_url(
-                bucket=bucket,
-                key=f"{key}-{rng.randint(0, 1_000_000)}",
-                method="GET",
-                expires=60,
+                "get_object",
+                Params={"Bucket": bucket, "Key": f"{key}-{rng.randint(0, 1_000_000)}"},
+                ExpiresIn=60,
             )
 
     t_boto = _timeit(run_boto, iterations)
