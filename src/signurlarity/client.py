@@ -45,7 +45,7 @@ class Client:
             access_key=aws_access_key_id,
             secret_key=aws_secret_access_key,
             region=self.region,
-            endpoint_url=endpoint_url
+            endpoint_url=endpoint_url,
         )
 
     def _extract_region(self, endpoint_url: str) -> str:
@@ -64,13 +64,13 @@ class Client:
         # - s3.amazonaws.com -> us-east-1
         # - s3.us-west-2.amazonaws.com -> us-west-2
         # - bucket.s3.eu-central-1.amazonaws.com -> eu-central-1
-        parts = hostname.split('.')
-        if 's3' in parts:
-            idx = parts.index('s3')
-            if idx + 1 < len(parts) and parts[idx + 1] != 'amazonaws':
+        parts = hostname.split(".")
+        if "s3" in parts:
+            idx = parts.index("s3")
+            if idx + 1 < len(parts) and parts[idx + 1] != "amazonaws":
                 return parts[idx + 1]
 
-        return 'us-east-1'
+        return "us-east-1"
 
     def generate_presigned_post(
         self,
@@ -100,9 +100,8 @@ class Client:
         ExpiresIn: int = 3600,
         HttpMethod: str = "",
     ) -> str:
-
         # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/generate_presigned_url.html
-        
+
         """Generate a presigned URL for an S3 operation.
 
         This method is boto3-compatible and maps to the underlying fast presigner.
@@ -133,8 +132,8 @@ class Client:
             Params = {}
 
         # Extract bucket and key from params
-        bucket = Params.get('Bucket')
-        key = Params.get('Key')
+        bucket = Params.get("Bucket")
+        key = Params.get("Key")
 
         if not bucket:
             raise PresignError("Missing required parameter 'Bucket' in Params")
@@ -147,10 +146,7 @@ class Client:
 
         try:
             return self._presigner.generate_presigned_url(
-                bucket=bucket,
-                key=key,
-                method=HttpMethod,
-                expires=ExpiresIn
+                bucket=bucket, key=key, method=HttpMethod, expires=ExpiresIn
             )
         except ValueError as e:
             raise PresignError(str(e)) from e
@@ -165,14 +161,14 @@ class Client:
             HTTP method string (GET, PUT, DELETE, etc.)
         """
         method_map = {
-            'get_object': 'GET',
-            'put_object': 'PUT',
-            'delete_object': 'DELETE',
-            'head_object': 'HEAD',
-            'list_objects': 'GET',
-            'list_objects_v2': 'GET',
+            "get_object": "GET",
+            "put_object": "PUT",
+            "delete_object": "DELETE",
+            "head_object": "HEAD",
+            "list_objects": "GET",
+            "list_objects_v2": "GET",
         }
-        return method_map.get(client_method.lower(), 'GET')
+        return method_map.get(client_method.lower(), "GET")
 
     def head_bucket(self, Bucket: str, **kwargs):
         """Check if a bucket exists and is accessible.

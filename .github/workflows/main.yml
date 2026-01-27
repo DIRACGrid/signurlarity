@@ -13,16 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # pre-commit:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - uses: actions/checkout@v5
-  #   - uses: actions/setup-python@v6
-  #     with:
-  #       python-version: 3.x
-  #   - uses: pre-commit/action@v3.0.1
-  #   - uses: pre-commit-ci/lite-action@v1.1.0
-  #     if: always()
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-python@v6
+      with:
+        python-version: 3.x
+    - uses: pre-commit/action@v3.0.1
+    - uses: pre-commit-ci/lite-action@v1.1.0
+      if: always()
 
   unittest:
     name: Unit test - ${{ matrix.python-version }}
