@@ -187,24 +187,5 @@ def test_generate_presigned_url_perf(moto_server, perf_test_dir):
         "speedup": t_boto / t_custom,
     }
 
-    # Informational output
-    print("\n" + "=" * 60)
-    print("PRESIGNED URL (GET) BENCHMARK")
-    print("=" * 60)
-    print(
-        f"boto3 generate_presigned_url: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
-    )
-    print(
-        f"custom S3PresignedURLGenerator: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
-    )
-    if t_custom > 0:
-        speedup = t_boto / t_custom
-        print(f"relative speed (custom vs boto3): {speedup:.2f}x")
-        if speedup > 1:
-            print(f"✓ Custom implementation is {speedup:.2f}x FASTER!")
-        else:
-            print(f"boto3 is {1 / speedup:.2f}x faster")
-
+    print(results)
     result_file.write_text(json.dumps(results, indent=2))
-
-    print("=" * 60)
