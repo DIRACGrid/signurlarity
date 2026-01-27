@@ -31,7 +31,7 @@ Repository = "https://github.com/diracx/signurlarity"
 
 
 [project.optional-dependencies]
-testing = ["pytest", "pytest-asyncio", "aiobotocore>=2.15", "botocore>=1.35", "moto[server]", "httpx","pytest-xdist"]
+testing = ["pytest", "rich", "pytest-benchmark", "pytest-asyncio", "aiobotocore>=2.15", "botocore>=1.35", "moto[server]", "httpx","pytest-xdist"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -48,8 +48,9 @@ platforms = ["linux-64", "osx-arm64"]
 
 [tool.pixi.environments]
 default = {features = [], solve-group = "default"}
-testing = {features = ["testing"], solve-group = "default"}
+# pytest-env = {features = ["pytest-feat", "testing"], solve-group = "default"}
 pre-commit = {features = ["pre-commit"], no-default-feature = true}
+
 py311 = {features = ["testing", "py311"]}
 py312 = {features = ["testing", "py312"]}
 py313 = {features = ["testing", "py313"]}
@@ -61,29 +62,30 @@ py314 = {features = ["testing", "py314"]}
 # kubernetes-helm = "*"
 [tool.pixi.feature.testing.pypi-dependencies]
 signurlarity = { path = ".", editable = true }
-[tool.pixi.feature.testing.tasks.pytest]
-cmd = "pytest"
-description = "Run pytest"
+
+# [tool.pixi.feature.pytest-feat.dependencies]
+# python = "*"
+# [tool.pixi.feature.pytest-feat.tasks.pytest]
+# cmd = "pytest"
 
 # Features for running pre-commit hooks
 [tool.pixi.feature.pre-commit.dependencies]
 pre-commit = "*"
 [tool.pixi.feature.pre-commit.tasks]
 pre-commit = "pre-commit"
-description = "Run pre-commit hooks"
 
 
 
 [tool.pixi.tasks]
 test = "python --version"
-perf = "pytest -s -k test_perf"
+unit-test = "pytest"
+perf-test = "pytest perf_tests/"
 
 [tool.pixi.feature.py311.dependencies]
 python = "3.11.*"
 
 [tool.pixi.feature.py312.dependencies]
 python = "3.12.*"
-
 
 [tool.pixi.feature.py313.dependencies]
 python = "3.13.*"
@@ -92,11 +94,11 @@ python = "3.13.*"
 python = "3.14.*"
 
 
-# Task that depends on other tasks in different environments
-[tool.pixi.tasks.test-perf]
-depends-on = [
-  { task = "perf", environment = "py311" },
-  { task = "perf", environment = "py312" },
-  { task = "perf", environment = "py313" },
-  { task = "perf", environment = "py314" },
-]
+# # Task that depends on other tasks in different environments
+# [tool.pixi.tasks.perf-comparison]
+# depends-on = [
+#   { task = "perf-test", environment = "py311" , args = ["--perf-test-dir", "/tmp/perf_test/"]},
+#   { task = "perf-test", environment = "py312" },
+#   { task = "perf-test", environment = "py313" },
+#   { task = "perf-test", environment = "py314" },
+# ]
