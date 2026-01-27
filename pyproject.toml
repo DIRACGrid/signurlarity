@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/"]
+packages = ["src/signurlarity"]
 
 [project]
 name = "signurlarity"
@@ -17,12 +17,13 @@ requires-python = ">=3.11"
 keywords = []
 license = { text = "GPL-3.0-only" }
 dynamic = ["version"]
+dependencies = ["httpx>=0.24.0"]
 classifiers = [
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-    "Programming Language :: Python :: 3",
-    "Topic :: Scientific/Engineering",
-    "Topic :: System :: Distributed Computing",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering",
+  "Topic :: System :: Distributed Computing",
 ]
 
 [project.urls]
@@ -31,7 +32,18 @@ Repository = "https://github.com/diracx/signurlarity"
 
 
 [project.optional-dependencies]
-testing = ["pytest", "rich", "pytest-benchmark", "pytest-asyncio", "aiobotocore>=2.15", "botocore>=1.35", "moto[server]", "httpx","pytest-xdist"]
+testing = [
+  "pytest",
+  "rich",
+  "pytest-benchmark",
+  "pytest-asyncio",
+  "aiobotocore>=2.15",
+  "botocore>=1.35",
+  "moto[server]",
+  "httpx",
+  "pytest-xdist",
+  "ty",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -42,31 +54,73 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 
+[tool.ruff]
+src = ["src", "tests", "perf_tests"]
+# exclude = ["diracx-client/src/diracx/client"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "B",   # flake8-bugbear
+  "I",   # isort
+  "PLE", # pylint errors
+  "D",   # pydocstyle
+  # "UP",   # pyUpgrade
+  "FLY", # flynt
+  "DTZ", # flake8-datetimez
+  "S",   # flake8-bandit
+  "N",   # pep8-naming
+]
+ignore = [
+  "B905",
+  "B006",
+  "S101", # bandit: use of assert https://docs.astral.sh/ruff/rules/assert/
+  # TODO: Maybe enable these
+  "D100",
+  "D101",
+  "D102",
+  "D103",
+  "D104",
+  "D105",
+  "D107",
+  # non lower case variables (https://docs.astral.sh/ruff/rules/non-lowercase-variable-in-function/)
+  "N806",
+  # invalid arguments (capital Bucket for example)
+  "N803",
+  # TODO CHRIS Use fstrings instead of join
+  "FLY002",
+]
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 120
+
+[tool.ruff.format]
+docstring-code-format = true
+
+
+[tool.isort]
+profile = "black"
+
+
 [tool.pixi.workspace]
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-arm64"]
 
 [tool.pixi.environments]
-default = {features = [], solve-group = "default"}
-# pytest-env = {features = ["pytest-feat", "testing"], solve-group = "default"}
-pre-commit = {features = ["pre-commit"], no-default-feature = true}
+default = { features = [], solve-group = "default" }
+pre-commit = { features = ["pre-commit"], no-default-feature = true }
+py311 = { features = ["testing", "py311"] }
+py312 = { features = ["testing", "py312"] }
+py313 = { features = ["testing", "py313"] }
+py314 = { features = ["testing", "py314"] }
 
-py311 = {features = ["testing", "py311"]}
-py312 = {features = ["testing", "py312"]}
-py313 = {features = ["testing", "py313"]}
-py314 = {features = ["testing", "py314"]}
-
-# Features for generating the documentation
-# [tool.pixi.feature.testing.dependencies]
-# python = "*"
-# kubernetes-helm = "*"
 [tool.pixi.feature.testing.pypi-dependencies]
 signurlarity = { path = ".", editable = true }
 
-# [tool.pixi.feature.pytest-feat.dependencies]
-# python = "*"
-# [tool.pixi.feature.pytest-feat.tasks.pytest]
-# cmd = "pytest"
 
 # Features for running pre-commit hooks
 [tool.pixi.feature.pre-commit.dependencies]
@@ -75,11 +129,11 @@ pre-commit = "*"
 pre-commit = "pre-commit"
 
 
-
 [tool.pixi.tasks]
-test = "python --version"
-unit-test = "pytest"
+unit-test = "pytest -v"
 perf-test = "pytest perf_tests/"
+display-perf-comparison = "python perf_tests/__main__.py"
+
 
 [tool.pixi.feature.py311.dependencies]
 python = "3.11.*"
@@ -94,11 +148,27 @@ python = "3.13.*"
 python = "3.14.*"
 
 
-# # Task that depends on other tasks in different environments
-# [tool.pixi.tasks.perf-comparison]
-# depends-on = [
-#   { task = "perf-test", environment = "py311" , args = ["--perf-test-dir", "/tmp/perf_test/"]},
-#   { task = "perf-test", environment = "py312" },
-#   { task = "perf-test", environment = "py313" },
-#   { task = "perf-test", environment = "py314" },
-# ]
+[tool.pixi.tasks.perf-comparison]
+depends-on = [
+  { task = "perf-test", environment = "py311", args = [
+    "--perf-test-dir",
+    "/tmp/perf_test/",
+  ] },
+  { task = "perf-test", environment = "py312", args = [
+    "--perf-test-dir",
+    "/tmp/perf_test/",
+  ] },
+  { task = "perf-test", environment = "py313", args = [
+    "--perf-test-dir",
+    "/tmp/perf_test/",
+  ] },
+  { task = "perf-test", environment = "py314", args = [
+    "--perf-test-dir",
+    "/tmp/perf_test/",
+  ] },
+  { task = "display-perf-comparison", environment = "py314", args = [
+    "--perf-test-dir",
+    "/tmp/perf_test/",
+  ] },
+
+]

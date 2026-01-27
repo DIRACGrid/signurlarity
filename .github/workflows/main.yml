@@ -98,6 +98,9 @@ jobs:
     name: Compare perf results
     needs: perftest
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Download math result for job 1
         uses: actions/download-artifact@v7
@@ -122,4 +125,13 @@ jobs:
           # Show any changes
           git diff
       - name: Compare tests
-        run: pixi run -e py314 python perf_tests/__main__.py --perf-test-dir ${{ runner.temp }}/perf_tests/
+        run: |
+          pixi run -e py314 display-perf-comparison --perf-test-dir ${{ runner.temp }}/perf_tests/ --md-output ${{ runner.temp }}/perf_tests/pretty.md
+      - name: Create Comment
+        if: ${{ github.event_name == 'pull_request' }}
+        run:
+          gh pr comment $PRNUM --body-file ${{ runner.temp }}/perf_tests/pretty.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PRNUM: ${{ github.event.pull_request.number }}

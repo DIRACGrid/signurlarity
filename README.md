@@ -12,9 +12,14 @@ pip install signurlarity
 
 [installation pixi](https://pixi.sh/latest/advanced/installation/)
 
+This will run functionnal tests.
+It will spawn docker container to test against `rustfs`
+
 ```bash
-pixi run pytest # add any pytest option you want
+pixi run unit-test # add any pytest option you want
 ```
+
+Any `pytest` argument can be added
 
 ## pre-commit
 
@@ -35,3 +40,26 @@ pixi run pre-commit --all-files # (2)!
 
 1. Runs `pre-commit` only for files which are uncommitted or which have been changed.
 2. Runs `pre-commit` for all files even if you haven't changed them.
+
+
+## Perf tests
+
+For a full performance comparison, run
+
+```bash
+pixi run perf-comparison
+```
+
+This will compare the results of `boto` and `signurlarity` against rustfs for python version 3.11, 3.12, 3.13 and 3.14, and generate `json` files in `/tmp/perf_test`
+
+If you want to run it for a specific version only:
+
+```bash
+pixi run -e py312 perf-test --perf-test-dir=/whatever/you/want
+```
+
+you can then display it with
+
+```bash
+pixi run -e py312 display-perf-comparison --perf-test-dir=/whatever/you/want
+```

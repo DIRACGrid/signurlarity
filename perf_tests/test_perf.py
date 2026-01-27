@@ -1,38 +1,48 @@
 from __future__ import annotations
 
 import json
-import sys
 import os
-import time
 import random
-import pytest
-import boto3
+import sys
+import time
 from pathlib import Path
-from signurlarity import Client
 
-AWS_ACCESS_KEY_ID = "testing"
-AWS_SECRET_ACCESS_KEY = "testing"
+import boto3
+import pytest
+
+from signurlarity import Client
 
 
 @pytest.fixture(scope="session")
-def moto_server(worker_id):
-    """Start the moto server in a separate thread and return the base URL.
+def rustfs_server():
+    """Spawn a test rustfs image."""
+    AWS_ACCESS_KEY_ID = "rustfsadmin"
+    AWS_SECRET_ACCESS_KEY = "rustfsadmin"  # noqa: S105
+    import subprocess
 
-    Using a real endpoint URL keeps URLs comparable to functional tests.
-    """
-    from moto.server import ThreadedMotoServer
-
-    port = 27133
-    if worker_id != "master":
-        port += int(worker_id.replace("gw", "")) + 1
-    server = ThreadedMotoServer(port=port)
-    server.start()
+    cmd = [
+        "docker",
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        "rustfs_local",
+        "-p",
+        "9000:9000",
+        "-p",
+        "9001:9001",
+        "rustfs/rustfs:latest",
+        "/data",
+    ]
+    # print(shlex.join(cmd))
+    subprocess.run(cmd, check=True)  # noqa: S603
     yield {
-        "endpoint_url": f"http://localhost:{port}",
+        "endpoint_url": "http://localhost:9000",
         "aws_access_key_id": AWS_ACCESS_KEY_ID,
         "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
     }
-    server.stop()
+    cmd = ["docker", "stop", "rustfs_local"]
+    subprocess.run(cmd, check=True)  # noqa: S603
 
 
 def _timeit(fn, iterations: int) -> float:
@@ -41,19 +51,23 @@ def _timeit(fn, iterations: int) -> float:
     return time.perf_counter() - start
 
 
-def test_generate_presigned_post_perf(moto_server):
+def test_generate_presigned_post_perf(rustfs_server, perf_test_dir):
     """Compare performance of boto3 vs signurlarity for presigned POST.
 
     This is a non-failing, informational test: it prints timings and skips
     if the signurlarity implementation is not available.
     """
+    py_vers = sys.version_info
+    test_dir = perf_test_dir / Path("test_generate_presigned_post_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
 
-    rng = random.Random(42)
+    rng = random.Random(42)  # noqa: S311
     bucket = "perf-bucket"
     key = "object.txt"
 
-    boto_client = boto3.client("s3", **moto_server)
-    light_client = Client(**moto_server)
+    boto_client = boto3.client("s3", **rustfs_server)
+    light_client = Client(**rustfs_server)
 
     # Bucket creation ensures produced URLs are fully valid for the endpoint
     # but is not part of the benchmark itself.
@@ -106,20 +120,24 @@ def test_generate_presigned_post_perf(moto_server):
             )
 
     t_boto = _timeit(run_boto, iterations)
-    t_light = _timeit(run_light, iterations)
+    t_custom = _timeit(run_light, iterations)
 
-    # Informational output; keep concise for CI logs
-    print(
-        f"boto3 generate_presigned_post: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
-    )
-    print(
-        f"signurlarity generate_presigned_post: {t_light:.4f}s for {iterations} ops ({iterations / t_light:.0f} ops/s)"
-    )
-    if t_light > 0:
-        print(f"relative speed (signurlarity vs boto3): {t_boto / t_light:.2f}x")
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "generate_presigned_post",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print(results)
+    result_file.write_text(json.dumps(results, indent=2))
 
 
-def test_generate_presigned_url_perf(moto_server, perf_test_dir):
+def test_generate_presigned_url_perf(rustfs_server, perf_test_dir):
     """Compare performance of boto3 vs custom S3PresignedURLGenerator for presigned URL.
 
     This benchmark compares boto3's generate_presigned_url with the custom
@@ -129,15 +147,15 @@ def test_generate_presigned_url_perf(moto_server, perf_test_dir):
     test_dir = perf_test_dir / Path("test_generate_presigned_url_perf")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
-    rng = random.Random(42)
+    rng = random.Random(42)  # noqa: S311
     bucket = "perf-bucket"
     key = "object.txt"
 
-    # Extract region from endpoint_url (moto uses us-east-1 by default)
+    # Extract region from endpoint_url
     region = "us-east-1"
 
-    boto_client = boto3.client("s3", region_name=region, **moto_server)
-    light_client = Client(**moto_server)
+    boto_client = boto3.client("s3", region_name=region, **rustfs_server)
+    light_client = Client(**rustfs_server)
 
     # custom_generator = S3PresignedURLGenerator(
     #     access_key=AWS_ACCESS_KEY_ID, secret_key=AWS_SECRET_ACCESS_KEY, region=region
@@ -187,21 +205,213 @@ def test_generate_presigned_url_perf(moto_server, perf_test_dir):
         "speedup": t_boto / t_custom,
     }
 
+    print(results)
+    result_file.write_text(json.dumps(results, indent=2))
+
+
+def test_head_bucket_perf(rustfs_server, perf_test_dir):
+    """Compare performance of boto3 vs signurlarity for head_bucket.
+
+    This benchmark compares boto3's head_bucket with the custom
+    implementation that has zero boto3 dependencies.
+    """
+    py_vers = sys.version_info
+    test_dir = perf_test_dir / Path("test_head_bucket_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    bucket = "perf-bucket"
+
+    # Extract region from endpoint_url
+    region = "us-east-1"
+
+    boto_client = boto3.client("s3", region_name=region, **rustfs_server)
+    light_client = Client(**rustfs_server)
+
+    # Create the bucket for testing
+    boto_client.create_bucket(Bucket=bucket)
+
+    iterations = 100
+
+    # Warm-up to mitigate one-time costs
+    for _ in range(10):
+        boto_client.head_bucket(Bucket=bucket)
+
+    for _ in range(10):
+        light_client.head_bucket(Bucket=bucket)
+
+    def run_boto(n: int):
+        for _ in range(n):
+            boto_client.head_bucket(Bucket=bucket)
+
+    def run_custom(n: int):
+        for _ in range(n):
+            light_client.head_bucket(Bucket=bucket)
+
+    t_boto = _timeit(run_boto, iterations)
+    t_custom = _timeit(run_custom, iterations)
+
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "head_bucket",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    result_file.write_text(json.dumps(results, indent=2))
+
+
+def test_head_object_perf(rustfs_server, perf_test_dir):
+    """Compare performance of boto3 vs signurlarity for head_object.
+
+    This benchmark compares boto3's head_object with the custom
+    implementation that has zero boto3 dependencies.
+    """
+    py_vers = sys.version_info
+    test_dir = perf_test_dir / Path("test_head_object_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    bucket = "perf-object"
+    key = "perf-object.txt"
+
+    # Extract region from endpoint_url
+    region = "us-east-1"
+
+    boto_client = boto3.client("s3", region_name=region, **rustfs_server)
+    light_client = Client(**rustfs_server)
+
+    # Create the bucket and object for testing
+    boto_client.create_bucket(Bucket=bucket)
+    boto_client.put_object(
+        Bucket=bucket, Key=key, Body=b"test data for head_object perf test"
+    )
+
+    iterations = 100
+
+    # Warm-up to mitigate one-time costs
+    for _ in range(10):
+        boto_client.head_object(Bucket=bucket, Key=key)
+
+    for _ in range(10):
+        light_client.head_object(Bucket=bucket, Key=key)
+
+    def run_boto(n: int):
+        for _ in range(n):
+            boto_client.head_object(Bucket=bucket, Key=key)
+
+    def run_custom(n: int):
+        for _ in range(n):
+            light_client.head_object(Bucket=bucket, Key=key)
+
+    t_boto = _timeit(run_boto, iterations)
+    t_custom = _timeit(run_custom, iterations)
+
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "head_object",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
     # Informational output
     print("\n" + "=" * 60)
-    print("PRESIGNED URL (GET) BENCHMARK")
+    print("HEAD OBJECT BENCHMARK")
     print("=" * 60)
     print(
-        f"boto3 generate_presigned_url: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+        f"boto3 head_object: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
     )
     print(
-        f"custom S3PresignedURLGenerator: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+        f"signurlarity head_object: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
     )
     if t_custom > 0:
         speedup = t_boto / t_custom
-        print(f"relative speed (custom vs boto3): {speedup:.2f}x")
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
         if speedup > 1:
-            print(f"✓ Custom implementation is {speedup:.2f}x FASTER!")
+            print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
+
+    print("=" * 60)
+
+
+def test_create_bucket_perf(rustfs_server, perf_test_dir):
+    """Compare performance of boto3 vs signurlarity for create_bucket.
+
+    This benchmark compares boto3's create_bucket with the signurlarity
+    implementation that uses httpx with AWS Signature V4.
+    """
+    py_vers = sys.version_info
+    test_dir = perf_test_dir / Path("test_create_bucket_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    boto_client = boto3.client("s3", **rustfs_server)
+    light_client = Client(**rustfs_server)
+
+    iterations = 100
+    bucket_prefix = "perf-bucket-create"
+
+    # Warm-up to mitigate one-time costs
+    for i in range(10):
+        bucket = f"{bucket_prefix}-warmup-{i}"
+        boto_client.create_bucket(Bucket=bucket)
+        boto_client.delete_bucket(Bucket=bucket)
+
+    for i in range(10):
+        bucket = f"{bucket_prefix}-warmup-light-{i}"
+        light_client.create_bucket(Bucket=bucket)
+        boto_client.delete_bucket(Bucket=bucket)
+
+    def run_boto(n: int):
+        for i in range(n):
+            bucket = f"{bucket_prefix}-boto-{i}"
+            boto_client.create_bucket(Bucket=bucket)
+            boto_client.delete_bucket(Bucket=bucket)
+
+    def run_custom(n: int):
+        for i in range(n):
+            bucket = f"{bucket_prefix}-custom-{i}"
+            light_client.create_bucket(Bucket=bucket)
+            boto_client.delete_bucket(Bucket=bucket)
+
+    t_boto = _timeit(run_boto, iterations)
+    t_custom = _timeit(run_custom, iterations)
+
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "create_bucket",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    # Informational output
+    print("\n" + "=" * 60)
+    print("CREATE BUCKET BENCHMARK")
+    print("=" * 60)
+    print(
+        f"boto3 create_bucket: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity create_bucket: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
