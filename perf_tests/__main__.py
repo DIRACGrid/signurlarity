@@ -3,20 +3,34 @@ from __future__ import annotations
 import argparse
 import glob
 import json
-from pathlib import Path
 from collections import defaultdict
-from rich.console import Console
+from pathlib import Path
+from typing import Optional
 
+from rich.console import Console
 from rich.table import Table
 
 
-def compare_results(result_dir: Path):
+def rich_table_to_markdown(table):
+    # Extract headers
+    headers = [col.header for col in table.columns]
+    markdown = "| " + " | ".join(headers) + " |\n"
+    markdown += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+
+    # Extract rows
+    for row_id in range(len(headers)):
+        # breakpoint()
+        row = [col._cells[row_id] for col in table.columns]
+        markdown += "| " + " | ".join(row) + " |\n"
+    return markdown
+
+
+def compare_results(result_dir: Path, md_output: Optional[Path] = None):
     if not result_dir.exists():
         raise ValueError(f"The directory {result_dir} does not exist !")
     global_results = defaultdict(dict)
 
     for test_path in glob.glob(f"{result_dir}/test*/run_*.json"):
-        print(f"Looking at {test_path}")
         test_result = json.loads(Path(test_path).read_text())
         global_results[test_result["tested_method"]][test_result["python_version"]] = (
             test_result["speedup"]
@@ -35,15 +49,22 @@ def compare_results(result_dir: Path):
         table.add_column(version, style="magenta")
 
     # Add rows
-    for test_name, test_data in global_results.items():
+    for test_name, test_data in sorted(global_results.items()):
         row = [test_name]
         for version in versions:
-            row.append(str(test_data.get(version, "?")))
+            if version in test_data:
+                val = f"{test_data[version]:.3f}"
+            else:
+                val = "?"
+            row.append(val)
         table.add_row(*row)
 
     # Display the table
     console = Console()
     console.print(table)
+
+    if md_output:
+        md_output.write_text(rich_table_to_markdown(table))
 
 
 def parse_args():
@@ -51,8 +72,14 @@ def parse_args():
     parser.add_argument(
         "--perf-test-dir", required=True, help="Path to the perf tests results."
     )
+    parser.add_argument(
+        "--md-output", required=False, help="Path to store the markdown output."
+    )
     args = parser.parse_args()
-    compare_results(Path(args.perf_test_dir).resolve())
+    md_output = None
+    if args.md_output:
+        md_output = Path(args.md_output).resolve()
+    compare_results(Path(args.perf_test_dir).resolve(), md_output)
 
 
 if __name__ == "__main__":
