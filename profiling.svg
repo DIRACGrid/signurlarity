@@ -1,0 +1,754 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="230" onload="init(evt)" viewBox="0 0 1200 230" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs >
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	.func_g:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	var details, searchbtn, matchedtxt, svg;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	// mouse-over for info
+	function s(node) {		// show
+		info = g_to_text(node);
+		details.nodeValue = "Function: " + info;
+	}
+	function c() {			// clear
+		details.nodeValue = ' ';
+	}
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	})
+
+	// functions
+	function find_child(parent, name, attr) {
+		var children = parent.childNodes;
+		for (var i=0; i<children.length;i++) {
+			if (children[i].tagName == name)
+				return (attr != undefined) ? children[i].attributes[attr].value : children[i];
+		}
+		return;
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_"+attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_"+attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_"+attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes["width"].value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes["x"].value = parseFloat(r.attributes["x"].value) +3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2*12*0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x=txt.length-2; x>0; x--) {
+			if (t.getSubStringLength(0, x+2) <= w) {
+				t.textContent = txt.substring(0,x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = (parseFloat(e.attributes["x"].value) - x - 10) * ratio + 10;
+				if(e.tagName == "text") e.attributes["x"].value = find_child(e.parentNode, "rect", "x") + 3;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseFloat(e.attributes["width"].value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_child(c[i], x-10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = 10;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseInt(svg.width.baseVal.value) - (10*2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr["width"].value);
+		var xmin = parseFloat(attr["x"].value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr["y"].value);
+		var ratio = (svg.width.baseVal.value - 2*10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "1.0";
+
+		var el = document.getElementsByTagName("g");
+		for(var i=0;i<el.length;i++){
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a["x"].value);
+			var ew = parseFloat(a["width"].value);
+			// Is it an ancestor
+			if (0 == 0) {
+				var upstack = parseFloat(a["y"].value) > ymin;
+			} else {
+				var upstack = parseFloat(a["y"].value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.style["opacity"] = "0.5";
+					zoom_parent(e);
+					e.onclick = function(e){unzoom(); zoom(this);};
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.style["display"] = "none";
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.style["display"] = "none";
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					e.onclick = function(e){zoom(this);};
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "0.0";
+
+		var el = document.getElementsByTagName("g");
+		for(i=0;i<el.length;i++) {
+			el[i].style["display"] = "block";
+			el[i].style["opacity"] = "1";
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.getElementsByTagName("rect");
+		for (var i=0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.style["opacity"] = "0.1";
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.style["opacity"] = "0.0";
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementsByTagName("g");
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			if (e.attributes["class"].value != "func_g")
+				continue;
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (rect == null) {
+				// the rect might be wrapped in an anchor
+				// if nameattr href is being used
+				if (rect = find_child(e, "a")) {
+				    rect = find_child(r, "rect");
+				}
+			}
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes["width"].value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes["x"].value);
+				orig_save(rect, "fill");
+				rect.attributes["fill"].value =
+				    "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.style["opacity"] = "1.0";
+		searchbtn.firstChild.nodeValue = "Reset Search"
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.style["opacity"] = "1.0";
+		pct = 100 * count / maxwidth;
+		if (pct == 100)
+			pct = "100"
+		else
+			pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+	function searchover(e) {
+		searchbtn.style["opacity"] = "1.0";
+	}
+	function searchout(e) {
+		if (searching) {
+			searchbtn.style["opacity"] = "1.0";
+		} else {
+			searchbtn.style["opacity"] = "0.1";
+		}
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1200.0" height="230.0" fill="url(#background)"  />
+<text text-anchor="middle" x="600.00" y="24" font-size="17" font-family="Verdana" fill="rgb(0,0,0)"  >Flame Graph</text>
+<text text-anchor="" x="10.00" y="213" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="details" > </text>
+<text text-anchor="" x="10.00" y="24" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="unzoom" onclick="unzoom()" style="opacity:0.0;cursor:pointer" >Reset Zoom</text>
+<text text-anchor="" x="1090.00" y="24" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="search" onmouseover="searchover()" onmouseout="searchout()" onclick="search_prompt()" style="opacity:0.1;cursor:pointer" >Search</text>
+<text text-anchor="" x="1090.00" y="213" font-size="12" font-family="Verdana" fill="rgb(0,0,0)" id="matched" > </text>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:424:_checknetloc (834 samples, 0.59%)</title><rect x="1081.0" y="69" width="7.1" height="15.0" fill="rgb(242,153,44)" rx="2" ry="2" />
+<text text-anchor="" x="1084.04" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:94:_init_openssl_hmac (6,078 samples, 4.33%)</title><rect x="787.4" y="53" width="51.1" height="15.0" fill="rgb(245,34,53)" rx="2" ry="2" />
+<text text-anchor="" x="790.38" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >hmac...</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:399:_urlparse (14,792 samples, 10.54%)</title><rect x="990.1" y="101" width="124.4" height="15.0" fill="rgb(253,85,20)" rx="2" ry="2" />
+<text text-anchor="" x="993.09" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >parse.py:399:_u..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>random.py:335:randint (3,618 samples, 2.58%)</title><rect x="1159.6" y="165" width="30.4" height="15.0" fill="rgb(248,75,31)" rx="2" ry="2" />
+<text text-anchor="" x="1162.57" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >ra..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isdigit' of 'str' objects&gt; (525 samples, 0.37%)</title><rect x="417.2" y="101" width="4.4" height="15.0" fill="rgb(238,110,29)" rx="2" ry="2" />
+<text text-anchor="" x="420.18" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.len&gt; (251 samples, 0.18%)</title><rect x="530.5" y="53" width="2.1" height="15.0" fill="rgb(250,106,10)" rx="2" ry="2" />
+<text text-anchor="" x="533.51" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'lstrip' of 'str' objects&gt; (318 samples, 0.23%)</title><rect x="552.8" y="69" width="2.7" height="15.0" fill="rgb(227,75,37)" rx="2" ry="2" />
+<text text-anchor="" x="555.80" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:399:_urlparse (13,098 samples, 9.33%)</title><rect x="457.3" y="101" width="110.2" height="15.0" fill="rgb(245,116,53)" rx="2" ry="2" />
+<text text-anchor="" x="460.31" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >parse.py:399:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:416:_splitnetloc (2,464 samples, 1.76%)</title><rect x="517.1" y="69" width="20.7" height="15.0" fill="rgb(239,60,12)" rx="2" ry="2" />
+<text text-anchor="" x="520.11" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'strip' of 'str' objects&gt; (300 samples, 0.21%)</title><rect x="564.9" y="69" width="2.6" height="15.0" fill="rgb(254,174,2)" rx="2" ry="2" />
+<text text-anchor="" x="567.93" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:79:__init (10,159 samples, 7.24%)</title><rect x="759.8" y="69" width="85.5" height="15.0" fill="rgb(215,212,24)" rx="2" ry="2" />
+<text text-anchor="" x="762.83" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >hmac.py:79..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'lstrip' of 'str' objects&gt; (359 samples, 0.26%)</title><rect x="1097.9" y="69" width="3.1" height="15.0" fill="rgb(242,156,29)" rx="2" ry="2" />
+<text text-anchor="" x="1100.94" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>client.py:167:generate_presigned_post (136,693 samples, 97.42%)</title><rect x="10.0" y="165" width="1149.6" height="15.0" fill="rgb(235,101,38)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="175.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >client.py:167:generate_presigned_post</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'hexdigest' of '_hashlib.HMAC' objects&gt; (1,147 samples, 0.82%)</title><rect x="249.4" y="117" width="9.6" height="15.0" fill="rgb(252,61,10)" rx="2" ry="2" />
+<text text-anchor="" x="252.35" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'getrandbits' of '_random.Random' objects&gt; (301 samples, 0.21%)</title><rect x="1183.1" y="133" width="2.6" height="15.0" fill="rgb(249,22,46)" rx="2" ry="2" />
+<text text-anchor="" x="1186.13" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'rpartition' of 'str' objects&gt; (289 samples, 0.21%)</title><rect x="344.1" y="85" width="2.4" height="15.0" fill="rgb(248,90,49)" rx="2" ry="2" />
+<text text-anchor="" x="347.12" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>encoder.py:207:iterencode (6,108 samples, 4.35%)</title><rect x="167.8" y="101" width="51.3" height="15.0" fill="rgb(237,90,14)" rx="2" ry="2" />
+<text text-anchor="" x="170.75" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >encod..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>encoder.py:105:__init__ (535 samples, 0.38%)</title><rect x="144.1" y="117" width="4.5" height="15.0" fill="rgb(252,157,38)" rx="2" ry="2" />
+<text text-anchor="" x="147.10" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method now&gt; (505 samples, 0.36%)</title><rect x="876.6" y="117" width="4.3" height="15.0" fill="rgb(241,177,51)" rx="2" ry="2" />
+<text text-anchor="" x="879.62" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (216 samples, 0.15%)</title><rect x="988.3" y="85" width="1.8" height="15.0" fill="rgb(212,155,25)" rx="2" ry="2" />
+<text text-anchor="" x="991.27" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isascii' of 'str' objects&gt; (274 samples, 0.20%)</title><rect x="1093.0" y="69" width="2.3" height="15.0" fill="rgb(251,100,46)" rx="2" ry="2" />
+<text text-anchor="" x="1095.98" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (212 samples, 0.15%)</title><rect x="346.5" y="101" width="1.8" height="15.0" fill="rgb(236,10,38)" rx="2" ry="2" />
+<text text-anchor="" x="349.55" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'join' of 'str' objects&gt; (341 samples, 0.24%)</title><rect x="223.7" y="101" width="2.8" height="15.0" fill="rgb(224,80,39)" rx="2" ry="2" />
+<text text-anchor="" x="226.65" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>presigner.py:183:_get_signature_key (35,216 samples, 25.10%)</title><rect x="567.5" y="133" width="296.1" height="15.0" fill="rgb(253,177,3)" rx="2" ry="2" />
+<text text-anchor="" x="570.46" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >presigner.py:183:_get_signature_key</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isascii' of 'str' objects&gt; (420 samples, 0.30%)</title><rect x="413.6" y="101" width="3.6" height="15.0" fill="rgb(238,192,1)" rx="2" ry="2" />
+<text text-anchor="" x="416.65" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'partition' of 'str' objects&gt; (227 samples, 0.16%)</title><rect x="350.5" y="101" width="1.9" height="15.0" fill="rgb(235,29,5)" rx="2" ry="2" />
+<text text-anchor="" x="353.49" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>random.py:245:_randbelow_with_getrandbits (1,595 samples, 1.14%)</title><rect x="1172.2" y="149" width="13.5" height="15.0" fill="rgb(205,18,9)" rx="2" ry="2" />
+<text text-anchor="" x="1175.25" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:119:_coerce_args (1,003 samples, 0.71%)</title><rect x="448.9" y="101" width="8.4" height="15.0" fill="rgb(219,80,25)" rx="2" ry="2" />
+<text text-anchor="" x="451.87" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method __new__ of type object at 0x562a70f211e0&gt; (349 samples, 0.25%)</title><rect x="444.5" y="85" width="2.9" height="15.0" fill="rgb(245,164,25)" rx="2" ry="2" />
+<text text-anchor="" x="447.50" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:171:_current (758 samples, 0.54%)</title><rect x="667.4" y="85" width="6.4" height="15.0" fill="rgb(241,50,17)" rx="2" ry="2" />
+<text text-anchor="" x="670.42" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:171:_current (178 samples, 0.13%)</title><rect x="247.9" y="117" width="1.5" height="15.0" fill="rgb(239,7,4)" rx="2" ry="2" />
+<text text-anchor="" x="250.86" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method now&gt; (713 samples, 0.51%)</title><rect x="1114.5" y="133" width="6.0" height="15.0" fill="rgb(241,77,0)" rx="2" ry="2" />
+<text text-anchor="" x="1117.49" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (798 samples, 0.57%)</title><rect x="845.3" y="69" width="6.7" height="15.0" fill="rgb(233,188,19)" rx="2" ry="2" />
+<text text-anchor="" x="848.26" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:164:hostname (4,452 samples, 3.17%)</title><rect x="315.0" y="117" width="37.4" height="15.0" fill="rgb(205,57,12)" rx="2" ry="2" />
+<text text-anchor="" x="317.96" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >par..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:205:_hostinfo (4,130 samples, 2.94%)</title><rect x="378.9" y="101" width="34.7" height="15.0" fill="rgb(221,1,27)" rx="2" ry="2" />
+<text text-anchor="" x="381.92" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >pa..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'lower' of 'str' objects&gt; (280 samples, 0.20%)</title><rect x="550.4" y="69" width="2.4" height="15.0" fill="rgb(211,162,20)" rx="2" ry="2" />
+<text text-anchor="" x="553.44" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:56:__init__ (3,527 samples, 2.51%)</title><rect x="264.3" y="117" width="29.7" height="15.0" fill="rgb(245,23,18)" rx="2" ry="2" />
+<text text-anchor="" x="267.32" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >hm..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:175:port (8,228 samples, 5.86%)</title><rect x="352.4" y="117" width="69.2" height="15.0" fill="rgb(243,101,2)" rx="2" ry="2" />
+<text text-anchor="" x="355.40" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >parse.p..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:193:hexdigest (2,115 samples, 1.51%)</title><rect x="241.2" y="133" width="17.8" height="15.0" fill="rgb(244,207,42)" rx="2" ry="2" />
+<text text-anchor="" x="244.21" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (804 samples, 0.57%)</title><rect x="838.5" y="53" width="6.8" height="15.0" fill="rgb(254,179,33)" rx="2" ry="2" />
+<text text-anchor="" x="841.50" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isalpha' of 'str' objects&gt; (293 samples, 0.21%)</title><rect x="1090.5" y="69" width="2.5" height="15.0" fill="rgb(245,172,48)" rx="2" ry="2" />
+<text text-anchor="" x="1093.51" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method __new__ of type object at 0x562a70f211e0&gt; (394 samples, 0.28%)</title><rect x="975.6" y="85" width="3.3" height="15.0" fill="rgb(236,121,15)" rx="2" ry="2" />
+<text text-anchor="" x="978.62" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:424:_checknetloc (739 samples, 0.53%)</title><rect x="537.8" y="69" width="6.2" height="15.0" fill="rgb(221,34,41)" rx="2" ry="2" />
+<text text-anchor="" x="540.83" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:200:new (4,160 samples, 2.96%)</title><rect x="259.0" y="133" width="35.0" height="15.0" fill="rgb(253,9,24)" rx="2" ry="2" />
+<text text-anchor="" x="262.00" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >hm..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'digest' of '_hashlib.HMAC' objects&gt; (4,236 samples, 3.02%)</title><rect x="673.8" y="85" width="35.6" height="15.0" fill="rgb(253,70,15)" rx="2" ry="2" />
+<text text-anchor="" x="676.79" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >~:0..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.len&gt; (284 samples, 0.20%)</title><rect x="1072.8" y="53" width="2.4" height="15.0" fill="rgb(221,33,12)" rx="2" ry="2" />
+<text text-anchor="" x="1075.77" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (200 samples, 0.14%)</title><rect x="290.6" y="85" width="1.7" height="15.0" fill="rgb(251,152,40)" rx="2" ry="2" />
+<text text-anchor="" x="293.64" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method _hashlib.hmac_new&gt; (3,710 samples, 2.64%)</title><rect x="807.3" y="37" width="31.2" height="15.0" fill="rgb(212,212,20)" rx="2" ry="2" />
+<text text-anchor="" x="810.30" y="47.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >~:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>presigner.py:166:_get_host (32,518 samples, 23.18%)</title><rect x="294.0" y="133" width="273.5" height="15.0" fill="rgb(247,141,26)" rx="2" ry="2" />
+<text text-anchor="" x="296.99" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >presigner.py:166:_get_host</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:108:_noop (171 samples, 0.12%)</title><rect x="447.4" y="101" width="1.5" height="15.0" fill="rgb(245,155,48)" rx="2" ry="2" />
+<text text-anchor="" x="450.43" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'partition' of 'str' objects&gt; (1,119 samples, 0.80%)</title><rect x="399.1" y="85" width="9.4" height="15.0" fill="rgb(215,188,10)" rx="2" ry="2" />
+<text text-anchor="" x="402.09" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__init__.py:185:dumps (12,111 samples, 8.63%)</title><rect x="124.7" y="133" width="101.8" height="15.0" fill="rgb(230,84,10)" rx="2" ry="2" />
+<text text-anchor="" x="127.67" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >__init__.py:..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:56:__init__ (14,200 samples, 10.12%)</title><rect x="732.6" y="85" width="119.4" height="15.0" fill="rgb(230,123,53)" rx="2" ry="2" />
+<text text-anchor="" x="735.55" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >hmac.py:56:__i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method binascii.b2a_base64&gt; (1,091 samples, 0.78%)</title><rect x="232.0" y="117" width="9.2" height="15.0" fill="rgb(230,148,51)" rx="2" ry="2" />
+<text text-anchor="" x="235.04" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'lower' of 'str' objects&gt; (316 samples, 0.23%)</title><rect x="1095.3" y="69" width="2.6" height="15.0" fill="rgb(206,166,47)" rx="2" ry="2" />
+<text text-anchor="" x="1098.28" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'strip' of 'str' objects&gt; (339 samples, 0.24%)</title><rect x="1111.6" y="69" width="2.9" height="15.0" fill="rgb(216,165,16)" rx="2" ry="2" />
+<text text-anchor="" x="1114.64" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>base64.py:48:b64encode (1,747 samples, 1.25%)</title><rect x="226.5" y="133" width="14.7" height="15.0" fill="rgb(238,162,41)" rx="2" ry="2" />
+<text text-anchor="" x="229.52" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'lower' of 'str' objects&gt; (257 samples, 0.18%)</title><rect x="348.3" y="101" width="2.2" height="15.0" fill="rgb(240,183,24)" rx="2" ry="2" />
+<text text-anchor="" x="351.33" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isascii' of 'str' objects&gt; (243 samples, 0.17%)</title><rect x="548.4" y="69" width="2.0" height="15.0" fill="rgb(225,55,29)" rx="2" ry="2" />
+<text text-anchor="" x="551.40" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isascii' of 'str' objects&gt; (224 samples, 0.16%)</title><rect x="542.2" y="53" width="1.8" height="15.0" fill="rgb(225,80,30)" rx="2" ry="2" />
+<text text-anchor="" x="545.16" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:374:urlparse (17,344 samples, 12.36%)</title><rect x="421.6" y="117" width="145.9" height="15.0" fill="rgb(243,216,52)" rx="2" ry="2" />
+<text text-anchor="" x="424.60" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >parse.py:374:urlpa..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>presigner.py:311:generate_presigned_post (135,433 samples, 96.52%)</title><rect x="20.6" y="149" width="1139.0" height="15.0" fill="rgb(220,100,14)" rx="2" ry="2" />
+<text text-anchor="" x="23.60" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >presigner.py:311:generate_presigned_post</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'find' of 'str' objects&gt; (292 samples, 0.21%)</title><rect x="1088.1" y="69" width="2.4" height="15.0" fill="rgb(227,67,18)" rx="2" ry="2" />
+<text text-anchor="" x="1091.06" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>presigner.py:191:_sign (32,586 samples, 23.22%)</title><rect x="587.0" y="117" width="274.1" height="15.0" fill="rgb(205,32,14)" rx="2" ry="2" />
+<text text-anchor="" x="590.02" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >presigner.py:191:_sign</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'replace' of 'str' objects&gt; (1,270 samples, 0.91%)</title><rect x="1101.0" y="69" width="10.6" height="15.0" fill="rgb(254,22,12)" rx="2" ry="2" />
+<text text-anchor="" x="1103.96" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'extend' of 'list' objects&gt; (346 samples, 0.25%)</title><rect x="1129.6" y="133" width="2.9" height="15.0" fill="rgb(247,147,3)" rx="2" ry="2" />
+<text text-anchor="" x="1132.57" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'encode' of 'str' objects&gt; (1,081 samples, 0.77%)</title><rect x="852.0" y="101" width="9.1" height="15.0" fill="rgb(229,82,40)" rx="2" ry="2" />
+<text text-anchor="" x="854.97" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isascii' of 'str' objects&gt; (253 samples, 0.18%)</title><rect x="1085.9" y="53" width="2.2" height="15.0" fill="rgb(212,99,49)" rx="2" ry="2" />
+<text text-anchor="" x="1088.93" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:119:_coerce_args (1,133 samples, 0.81%)</title><rect x="980.6" y="101" width="9.5" height="15.0" fill="rgb(241,176,4)" rx="2" ry="2" />
+<text text-anchor="" x="983.56" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'bit_length' of 'int' objects&gt; (276 samples, 0.20%)</title><rect x="1180.8" y="133" width="2.3" height="15.0" fill="rgb(245,28,13)" rx="2" ry="2" />
+<text text-anchor="" x="1183.81" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>presigner.py:38:_format_timestamps (8,451 samples, 6.02%)</title><rect x="863.6" y="133" width="71.1" height="15.0" fill="rgb(232,106,21)" rx="2" ry="2" />
+<text text-anchor="" x="866.62" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >presigne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'decode' of 'bytes' objects&gt; (417 samples, 0.30%)</title><rect x="1120.5" y="133" width="3.5" height="15.0" fill="rgb(219,94,44)" rx="2" ry="2" />
+<text text-anchor="" x="1123.48" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'find' of 'str' objects&gt; (619 samples, 0.44%)</title><rect x="532.6" y="53" width="5.2" height="15.0" fill="rgb(220,80,9)" rx="2" ry="2" />
+<text text-anchor="" x="535.62" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'replace' of 'str' objects&gt; (1,125 samples, 0.80%)</title><rect x="555.5" y="69" width="9.4" height="15.0" fill="rgb(206,97,27)" rx="2" ry="2" />
+<text text-anchor="" x="558.47" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:94:_init_openssl_hmac (1,509 samples, 1.08%)</title><rect x="277.9" y="85" width="12.7" height="15.0" fill="rgb(250,163,36)" rx="2" ry="2" />
+<text text-anchor="" x="280.95" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'partition' of 'str' objects&gt; (527 samples, 0.38%)</title><rect x="339.7" y="85" width="4.4" height="15.0" fill="rgb(246,185,20)" rx="2" ry="2" />
+<text text-anchor="" x="342.68" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:374:urlparse (19,653 samples, 14.01%)</title><rect x="949.2" y="117" width="165.3" height="15.0" fill="rgb(240,26,23)" rx="2" ry="2" />
+<text text-anchor="" x="952.21" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >parse.py:374:urlparse</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:200:new (16,951 samples, 12.08%)</title><rect x="709.4" y="101" width="142.6" height="15.0" fill="rgb(215,59,34)" rx="2" ry="2" />
+<text text-anchor="" x="712.42" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >hmac.py:200:new</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:205:_hostinfo (1,946 samples, 1.39%)</title><rect x="330.2" y="101" width="16.3" height="15.0" fill="rgb(205,216,22)" rx="2" ry="2" />
+<text text-anchor="" x="333.18" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'strftime' of 'datetime.date' objects&gt; (3,222 samples, 2.30%)</title><rect x="1132.5" y="133" width="27.1" height="15.0" fill="rgb(228,200,27)" rx="2" ry="2" />
+<text text-anchor="" x="1135.48" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >~..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'find' of 'str' objects&gt; (259 samples, 0.18%)</title><rect x="544.0" y="69" width="2.2" height="15.0" fill="rgb(221,21,3)" rx="2" ry="2" />
+<text text-anchor="" x="547.04" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (191 samples, 0.14%)</title><rect x="455.7" y="85" width="1.6" height="15.0" fill="rgb(225,41,27)" rx="2" ry="2" />
+<text text-anchor="" x="458.70" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'encode' of 'str' objects&gt; (304 samples, 0.22%)</title><rect x="861.1" y="117" width="2.5" height="15.0" fill="rgb(234,40,3)" rx="2" ry="2" />
+<text text-anchor="" x="864.06" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:499:_urlsplit (12,279 samples, 8.75%)</title><rect x="464.2" y="85" width="103.3" height="15.0" fill="rgb(219,174,1)" rx="2" ry="2" />
+<text text-anchor="" x="467.19" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >parse.py:499..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method _hashlib.hmac_new&gt; (921 samples, 0.66%)</title><rect x="282.9" y="69" width="7.7" height="15.0" fill="rgb(239,187,9)" rx="2" ry="2" />
+<text text-anchor="" x="285.89" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (198 samples, 0.14%)</title><rect x="292.3" y="101" width="1.7" height="15.0" fill="rgb(212,97,47)" rx="2" ry="2" />
+<text text-anchor="" x="295.32" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'find' of 'str' objects&gt; (700 samples, 0.50%)</title><rect x="1075.2" y="53" width="5.8" height="15.0" fill="rgb(241,229,3)" rx="2" ry="2" />
+<text text-anchor="" x="1078.15" y="63.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method _operator.index&gt; (516 samples, 0.37%)</title><rect x="1185.7" y="149" width="4.3" height="15.0" fill="rgb(246,6,2)" rx="2" ry="2" />
+<text text-anchor="" x="1188.66" y="159.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'rpartition' of 'str' objects&gt; (612 samples, 0.44%)</title><rect x="408.5" y="85" width="5.1" height="15.0" fill="rgb(227,162,54)" rx="2" ry="2" />
+<text text-anchor="" x="411.50" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:416:_splitnetloc (2,784 samples, 1.98%)</title><rect x="1057.6" y="69" width="23.4" height="15.0" fill="rgb(209,64,37)" rx="2" ry="2" />
+<text text-anchor="" x="1060.63" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >p..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>&lt;string&gt;:1:&lt;lambda&gt; (885 samples, 0.63%)</title><rect x="440.0" y="101" width="7.4" height="15.0" fill="rgb(211,40,8)" rx="2" ry="2" />
+<text text-anchor="" x="442.99" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>encoder.py:185:encode (9,266 samples, 6.60%)</title><rect x="148.6" y="117" width="77.9" height="15.0" fill="rgb(215,137,37)" rx="2" ry="2" />
+<text text-anchor="" x="151.59" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >encoder.p..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:108:_noop (193 samples, 0.14%)</title><rect x="978.9" y="101" width="1.7" height="15.0" fill="rgb(230,123,25)" rx="2" ry="2" />
+<text text-anchor="" x="981.94" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;built-in method builtins.isinstance&gt; (539 samples, 0.38%)</title><rect x="219.1" y="101" width="4.6" height="15.0" fill="rgb(244,188,52)" rx="2" ry="2" />
+<text text-anchor="" x="222.12" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:79:__init (2,523 samples, 1.80%)</title><rect x="271.1" y="101" width="21.2" height="15.0" fill="rgb(225,19,13)" rx="2" ry="2" />
+<text text-anchor="" x="274.10" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>&lt;string&gt;:1:&lt;lambda&gt; (999 samples, 0.71%)</title><rect x="970.5" y="101" width="8.4" height="15.0" fill="rgb(212,131,12)" rx="2" ry="2" />
+<text text-anchor="" x="973.54" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>presigner.py:55:_get_credential_scope (449 samples, 0.32%)</title><rect x="934.7" y="133" width="3.8" height="15.0" fill="rgb(243,207,13)" rx="2" ry="2" />
+<text text-anchor="" x="937.69" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>hmac.py:183:digest (8,127 samples, 5.79%)</title><rect x="641.1" y="101" width="68.3" height="15.0" fill="rgb(211,88,45)" rx="2" ry="2" />
+<text text-anchor="" x="644.07" y="111.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >hmac.py..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>parse.py:499:_urlsplit (13,867 samples, 9.88%)</title><rect x="997.9" y="85" width="116.6" height="15.0" fill="rgb(252,44,6)" rx="2" ry="2" />
+<text text-anchor="" x="1000.87" y="95.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >parse.py:499:_..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'isalpha' of 'str' objects&gt; (259 samples, 0.18%)</title><rect x="546.2" y="69" width="2.2" height="15.0" fill="rgb(242,218,12)" rx="2" ry="2" />
+<text text-anchor="" x="549.22" y="79.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>all (140,311 samples, 100%)</title><rect x="10.0" y="181" width="1180.0" height="15.0" fill="rgb(243,54,53)" rx="2" ry="2" />
+<text text-anchor="" x="13.00" y="191.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>presigner.py:67:_get_scheme (20,930 samples, 14.92%)</title><rect x="938.5" y="133" width="176.0" height="15.0" fill="rgb(213,227,20)" rx="2" ry="2" />
+<text text-anchor="" x="941.47" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >presigner.py:67:_get_s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'strftime' of 'datetime.date' objects&gt; (6,400 samples, 4.56%)</title><rect x="880.9" y="117" width="53.8" height="15.0" fill="rgb(209,127,27)" rx="2" ry="2" />
+<text text-anchor="" x="883.87" y="127.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  >~:0:&lt;..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>~:0:&lt;method 'encode' of 'str' objects&gt; (663 samples, 0.47%)</title><rect x="1124.0" y="133" width="5.6" height="15.0" fill="rgb(245,83,50)" rx="2" ry="2" />
+<text text-anchor="" x="1126.99" y="143.5" font-size="12" font-family="Verdana" fill="rgb(0,0,0)"  ></text>
+</g>
+</svg>

@@ -55,11 +55,36 @@ This will compare the results of `boto` and `signurlarity` against rustfs for py
 If you want to run it for a specific version only:
 
 ```bash
-pixi run -e py312 perf-test --perf-test-dir=/whatever/you/want
+pixi run -e py314 perf-test --perf-test-dir=/whatever/you/want
 ```
 
 you can then display it with
 
 ```bash
-pixi run -e py312 display-perf-comparison --perf-test-dir=/whatever/you/want
+pixi run -e py314 display-perf-comparison --perf-test-dir=/whatever/you/want
 ```
+
+## Profiling tests
+
+You can run profiling tests
+
+
+```bash
+pixi run -e py314 profile-test -s --perf-test-dir=/whatever/you/want
+```
+
+This will generate `prof` [files](https://docs.python.org/3/library/profile.html)
+
+
+You can convert it in svg and open it in your web browser like so
+
+
+
+```shell
+pixi shell -e py314
+flameprof --format=log profile_generate_presigned_post/presigned_post.prof | flamegraph > profile_generate_presigned_post/presigned_post.svg
+```
+
+:
+
+ ![Example results](profiling.svg)
