@@ -62,8 +62,9 @@ class S3Presigner:
 
         """
         now = timestamp or datetime.now(timezone.utc)
-        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
-        date_stamp = now.strftime("%Y%m%d")
+        date_stamp = f"{now.year}{now.month:02d}{now.day:02d}"
+        amz_date = f"{date_stamp}T{now.hour:02d}{now.minute:02d}{now.second:02d}Z"
+
         return amz_date, date_stamp
 
     def _get_credential_scope(self, date_stamp: str) -> str:
@@ -358,8 +359,12 @@ class S3Presigner:
         )
 
         # Build policy document
+        expiration_date = (
+            f"{expiration.year}-{expiration.month:02d}-{expiration.day:02d}"
+        )
+        expiration_time = f"{expiration.hour:02d}:{expiration.minute:02d}:{expiration.second:02d}.000Z"
         policy_document = {
-            "expiration": expiration.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "expiration": f"{expiration_date}T{expiration_time}",
             "conditions": policy_conditions,
         }
 
