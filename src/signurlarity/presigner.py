@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import urlparse
 
 import orjson
+from cryptography.hazmat.primitives import hashes, hmac
 
 
 class S3Presigner:
@@ -152,9 +152,9 @@ class S3Presigner:
 
         # Calculate signature
         signing_key = self._get_signature_key(date_stamp)
-        signature = hmac.new(
-            signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        h = hmac.HMAC(signing_key, hashes.SHA256())
+        h.update(string_to_sign.encode("utf-8"))
+        signature = h.finalize().hex()
 
         # Build final URL
 
@@ -184,7 +184,9 @@ class S3Presigner:
 
     def _sign(self, key: bytes, msg: str) -> bytes:
         """Sign a message with a key using HMAC-SHA256."""
-        return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+        h = hmac.HMAC(key, hashes.SHA256())
+        h.update(msg.encode("utf-8"))
+        return h.finalize()
 
     def _uri_encode(self, s: str) -> str:
         """URI encode a string following AWS requirements."""
@@ -282,9 +284,9 @@ class S3Presigner:
 
         # Calculate signature
         signing_key = self._get_signature_key(date_stamp)
-        signature = hmac.new(
-            signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        h = hmac.HMAC(signing_key, hashes.SHA256())
+        h.update(string_to_sign.encode("utf-8"))
+        signature = h.finalize().hex()
 
         # Build Authorization header
         authorization_header = (
@@ -375,9 +377,9 @@ class S3Presigner:
 
         # Sign the policy
         signing_key = self._get_signature_key(date_stamp)
-        signature = hmac.new(
-            signing_key, policy_b64.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        h = hmac.HMAC(signing_key, hashes.SHA256())
+        h.update(policy_b64.encode("utf-8"))
+        signature = h.finalize().hex()
         post_fields["x-amz-signature"] = signature
 
         # Build URL
