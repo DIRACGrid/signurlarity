@@ -5,10 +5,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import urlparse
+
+import orjson
 
 
 class S3Presigner:
@@ -363,8 +364,8 @@ class S3Presigner:
         }
 
         # Encode policy
-        policy_json = json.dumps(policy_document, separators=(",", ":"))
-        policy_b64 = base64.b64encode(policy_json.encode("utf-8")).decode("utf-8")
+        policy_json = orjson.dumps(policy_document)
+        policy_b64 = base64.b64encode(policy_json).decode("utf-8")
         post_fields["policy"] = policy_b64
 
         # Sign the policy

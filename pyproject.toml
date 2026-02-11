@@ -17,7 +17,7 @@ requires-python = ">=3.11"
 keywords = []
 license = { text = "GPL-3.0-only" }
 dynamic = ["version"]
-dependencies = ["httpx>=0.24.0"]
+dependencies = ["httpx>=0.24.0", "orjson"]
 classifiers = [
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
