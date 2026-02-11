@@ -8,6 +8,7 @@ import hmac
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 
 class S3Presigner:
@@ -34,6 +35,18 @@ class S3Presigner:
         self.secret_key = secret_key
         self.region = region
         self.endpoint_url = endpoint_url
+
+        self._scheme = "https"
+
+        self._parsed_host: Optional[str] = None
+        if self.endpoint_url:
+            parsed = urlparse(self.endpoint_url)
+            # For custom endpoints like moto, use hostname:port directly
+            if parsed.port:
+                self._parsed_host = f"{parsed.hostname}:{parsed.port}"
+            else:
+                self._parsed_host = parsed.hostname or parsed.netloc
+            self._scheme = parsed.scheme or "https"
 
     def _format_timestamps(
         self, timestamp: Optional[datetime] = None
@@ -63,21 +76,6 @@ class S3Presigner:
 
         """
         return f"{date_stamp}/{self.region}/s3/aws4_request"
-
-    def _get_scheme(self) -> str:
-        """Get the URL scheme (http/https) from endpoint_url.
-
-        Returns:
-            URL scheme (defaults to 'https')
-
-        """
-        scheme = "https"
-        if self.endpoint_url:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(self.endpoint_url)
-            scheme = parsed.scheme or "https"
-        return scheme
 
     def generate_presigned_url(
         self,
@@ -157,23 +155,17 @@ class S3Presigner:
         ).hexdigest()
 
         # Build final URL
-        scheme = self._get_scheme()
+
         return (
-            f"{scheme}://{host}{canonical_uri}?"
+            f"{self._scheme}://{host}{canonical_uri}?"
             f"{canonical_querystring}&X-Amz-Signature={signature}"
         )
 
     def _get_host(self, bucket: str) -> str:
         """Get the S3 host for the given bucket and region."""
         # If custom endpoint is provided, extract hostname from it
-        if self.endpoint_url:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(self.endpoint_url)
-            # For custom endpoints like moto, use hostname:port directly
-            if parsed.port:
-                return f"{parsed.hostname}:{parsed.port}"
-            return parsed.hostname or parsed.netloc
+        if self._parsed_host:
+            return self._parsed_host
 
         # Standard AWS S3 endpoints
         if self.region == "us-east-1":
@@ -383,15 +375,15 @@ class S3Presigner:
         post_fields["x-amz-signature"] = signature
 
         # Build URL
-        scheme = self._get_scheme()
+
         host = self._get_host(bucket)
 
         # For custom endpoints (like moto), use path-style: /bucket
         # For AWS, use virtual-hosted style (bucket is in the host)
         if self.endpoint_url:
-            url = f"{scheme}://{host}/{bucket}"
+            url = f"{self._scheme}://{host}/{bucket}"
         else:
-            url = f"{scheme}://{host}/"
+            url = f"{self._scheme}://{host}/"
 
         return {
             "url": url,
