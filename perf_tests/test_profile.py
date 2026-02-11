@@ -9,6 +9,8 @@ from pstats import SortKey
 
 from signurlarity import Client
 
+ITERATIONS = 100_000
+
 
 def test_profile_generate_presigned_post(perf_test_dir):
     """Compare performance of boto3 vs signurlarity for presigned POST.
@@ -21,7 +23,7 @@ def test_profile_generate_presigned_post(perf_test_dir):
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-bucket"
-    key = "object.txt"
+    key = "object_" * 10
 
     light_client = Client(
         **{
@@ -35,10 +37,8 @@ def test_profile_generate_presigned_post(perf_test_dir):
     fields = None
     conditions = None
 
-    iterations = 2000
-
     with cProfile.Profile() as pr:
-        for _ in range(iterations):
+        for _ in range(ITERATIONS):
             light_client.generate_presigned_post(
                 Bucket=bucket,
                 Key=f"{key}-{rng.randint(0, 1_000_000)}",
