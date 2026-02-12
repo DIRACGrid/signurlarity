@@ -88,10 +88,11 @@ def rustfs_server():
         "9000:9000",
         "-p",
         "9001:9001",
-        "rustfs/rustfs:latest",
+        "rustfs/rustfs:1.0.0-alpha.82",  # return to latest when https://github.com/rustfs/rustfs/issues/1773 is fixed
         "/data",
     ]
     # print(shlex.join(cmd))
+
     subprocess.run(cmd, check=True)  # noqa: S603
     yield {
         "endpoint_url": "http://localhost:9000",

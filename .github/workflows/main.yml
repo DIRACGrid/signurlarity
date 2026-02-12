@@ -135,3 +135,42 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PRNUM: ${{ github.event.pull_request.number }}
+
+  run-profiling:
+    name: Profile presigned URLs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Apply workarounds
+        run: |
+          # Workaround for https://github.com/prefix-dev/pixi/issues/3762
+          sed -i.bak 's@editable = true@editable = false@g' pyproject.toml
+          rm pyproject.toml.bak
+          # Show any changes
+          git diff
+      - uses: prefix-dev/setup-pixi@v0.9.3
+        with:
+          environment: py314
+      - name: Run pytest
+        run: pixi run -e py314 pytest -v -s perf_tests/test_profile.py --perf-test-dir ${{ runner.temp }}/profiling/
+      - name: Generate table
+        shell: pixi run -e py314 bash -e {0}
+        run: |
+          python -c "import pstats;from pstats import SortKey; pstats.Stats('${{ runner.temp }}/profiling/profile_generate_presigned_post/presigned_post.prof').sort_stats(SortKey.TIME).print_stats(10)" > ${{ runner.temp }}/profiling/presigned_post.md
+      # - name: Upload profiling SVG
+      #   uses: actions/upload-artifact@v6
+      #   with:
+      #     name: profiling-flamegraph
+      #     path: ${{ runner.temp }}/profiling/presigned_post.svg
+      - name: Create Comment
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          gh pr comment $PRNUM --body-file ${{ runner.temp }}/profiling/presigned_post.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PRNUM: ${{ github.event.pull_request.number }}

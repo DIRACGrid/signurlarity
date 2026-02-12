@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
-import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from urllib.parse import urlparse
+
+import orjson
+from cryptography.hazmat.primitives import hashes, hmac
 
 
 class S3Presigner:
@@ -35,6 +37,18 @@ class S3Presigner:
         self.region = region
         self.endpoint_url = endpoint_url
 
+        self._scheme = "https"
+
+        self._parsed_host: Optional[str] = None
+        if self.endpoint_url:
+            parsed = urlparse(self.endpoint_url)
+            # For custom endpoints like moto, use hostname:port directly
+            if parsed.port:
+                self._parsed_host = f"{parsed.hostname}:{parsed.port}"
+            else:
+                self._parsed_host = parsed.hostname or parsed.netloc
+            self._scheme = parsed.scheme or "https"
+
     def _format_timestamps(
         self, timestamp: Optional[datetime] = None
     ) -> tuple[str, str]:
@@ -48,8 +62,9 @@ class S3Presigner:
 
         """
         now = timestamp or datetime.now(timezone.utc)
-        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
-        date_stamp = now.strftime("%Y%m%d")
+        date_stamp = f"{now.year}{now.month:02d}{now.day:02d}"
+        amz_date = f"{date_stamp}T{now.hour:02d}{now.minute:02d}{now.second:02d}Z"
+
         return amz_date, date_stamp
 
     def _get_credential_scope(self, date_stamp: str) -> str:
@@ -63,21 +78,6 @@ class S3Presigner:
 
         """
         return f"{date_stamp}/{self.region}/s3/aws4_request"
-
-    def _get_scheme(self) -> str:
-        """Get the URL scheme (http/https) from endpoint_url.
-
-        Returns:
-            URL scheme (defaults to 'https')
-
-        """
-        scheme = "https"
-        if self.endpoint_url:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(self.endpoint_url)
-            scheme = parsed.scheme or "https"
-        return scheme
 
     def generate_presigned_url(
         self,
@@ -152,28 +152,22 @@ class S3Presigner:
 
         # Calculate signature
         signing_key = self._get_signature_key(date_stamp)
-        signature = hmac.new(
-            signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        h = hmac.HMAC(signing_key, hashes.SHA256())
+        h.update(string_to_sign.encode("utf-8"))
+        signature = h.finalize().hex()
 
         # Build final URL
-        scheme = self._get_scheme()
+
         return (
-            f"{scheme}://{host}{canonical_uri}?"
+            f"{self._scheme}://{host}{canonical_uri}?"
             f"{canonical_querystring}&X-Amz-Signature={signature}"
         )
 
     def _get_host(self, bucket: str) -> str:
         """Get the S3 host for the given bucket and region."""
         # If custom endpoint is provided, extract hostname from it
-        if self.endpoint_url:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(self.endpoint_url)
-            # For custom endpoints like moto, use hostname:port directly
-            if parsed.port:
-                return f"{parsed.hostname}:{parsed.port}"
-            return parsed.hostname or parsed.netloc
+        if self._parsed_host:
+            return self._parsed_host
 
         # Standard AWS S3 endpoints
         if self.region == "us-east-1":
@@ -190,7 +184,9 @@ class S3Presigner:
 
     def _sign(self, key: bytes, msg: str) -> bytes:
         """Sign a message with a key using HMAC-SHA256."""
-        return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+        h = hmac.HMAC(key, hashes.SHA256())
+        h.update(msg.encode("utf-8"))
+        return h.finalize()
 
     def _uri_encode(self, s: str) -> str:
         """URI encode a string following AWS requirements."""
@@ -288,9 +284,9 @@ class S3Presigner:
 
         # Calculate signature
         signing_key = self._get_signature_key(date_stamp)
-        signature = hmac.new(
-            signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        h = hmac.HMAC(signing_key, hashes.SHA256())
+        h.update(string_to_sign.encode("utf-8"))
+        signature = h.finalize().hex()
 
         # Build Authorization header
         authorization_header = (
@@ -365,33 +361,37 @@ class S3Presigner:
         )
 
         # Build policy document
+        expiration_date = (
+            f"{expiration.year}-{expiration.month:02d}-{expiration.day:02d}"
+        )
+        expiration_time = f"{expiration.hour:02d}:{expiration.minute:02d}:{expiration.second:02d}.000Z"
         policy_document = {
-            "expiration": expiration.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "expiration": f"{expiration_date}T{expiration_time}",
             "conditions": policy_conditions,
         }
 
         # Encode policy
-        policy_json = json.dumps(policy_document, separators=(",", ":"))
-        policy_b64 = base64.b64encode(policy_json.encode("utf-8")).decode("utf-8")
+        policy_json = orjson.dumps(policy_document)
+        policy_b64 = base64.b64encode(policy_json).decode("utf-8")
         post_fields["policy"] = policy_b64
 
         # Sign the policy
         signing_key = self._get_signature_key(date_stamp)
-        signature = hmac.new(
-            signing_key, policy_b64.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        h = hmac.HMAC(signing_key, hashes.SHA256())
+        h.update(policy_b64.encode("utf-8"))
+        signature = h.finalize().hex()
         post_fields["x-amz-signature"] = signature
 
         # Build URL
-        scheme = self._get_scheme()
+
         host = self._get_host(bucket)
 
         # For custom endpoints (like moto), use path-style: /bucket
         # For AWS, use virtual-hosted style (bucket is in the host)
         if self.endpoint_url:
-            url = f"{scheme}://{host}/{bucket}"
+            url = f"{self._scheme}://{host}/{bucket}"
         else:
-            url = f"{scheme}://{host}/"
+            url = f"{self._scheme}://{host}/"
 
         return {
             "url": url,

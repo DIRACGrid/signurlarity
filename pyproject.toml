@@ -17,7 +17,7 @@ requires-python = ">=3.11"
 keywords = []
 license = { text = "GPL-3.0-only" }
 dynamic = ["version"]
-dependencies = ["httpx>=0.24.0"]
+dependencies = ["httpx>=0.24.0", "orjson"]
 classifiers = [
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
@@ -118,7 +118,11 @@ py312 = { features = ["testing", "py312"] }
 py313 = { features = ["testing", "py313"] }
 py314 = { features = ["testing", "py314"] }
 
+[tool.pixi.feature.testing.dependencies]
+flamegraph-pl = "*"
+
 [tool.pixi.feature.testing.pypi-dependencies]
+flameprof = "*"
 signurlarity = { path = ".", editable = true }
 
 
@@ -131,8 +135,9 @@ pre-commit = "pre-commit"
 
 [tool.pixi.tasks]
 unit-test = "pytest -v"
-perf-test = "pytest perf_tests/"
+perf-test = "pytest -v perf_tests/test_perf.py"
 display-perf-comparison = "python perf_tests/__main__.py"
+profile-test = "pytest -v perf_tests/test_profile.py"
 
 
 [tool.pixi.feature.py311.dependencies]
@@ -170,5 +175,4 @@ depends-on = [
     "--perf-test-dir",
     "/tmp/perf_test/",
   ] },
-
 ]
