@@ -14,7 +14,7 @@ def pytest_addoption(parser):
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def perf_test_dir(request) -> Path:
     perf_test_dir = request.config.getoption("--perf-test-dir")
     if perf_test_dir is None:
