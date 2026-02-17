@@ -16,10 +16,9 @@ def rich_table_to_markdown(table):
     headers = [col.header for col in table.columns]
     markdown = "| " + " | ".join(headers) + " |\n"
     markdown += "| " + " | ".join(["---"] * len(headers)) + " |\n"
-
+    nb_cells = max([len(col._cells) for col in table.columns])
     # Extract rows
-    for row_id in range(len(headers)):
-        # breakpoint()
+    for row_id in range(nb_cells):
         row = [col._cells[row_id] for col in table.columns]
         markdown += "| " + " | ".join(row) + " |\n"
     return markdown
