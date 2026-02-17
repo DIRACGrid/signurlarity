@@ -135,9 +135,9 @@ pre-commit = "pre-commit"
 
 [tool.pixi.tasks]
 unit-test = "pytest -v"
-perf-test = "pytest -v perf_tests/test_perf.py"
+perf-test = "pytest -v perf_tests/test_perf*.py"
 display-perf-comparison = "python perf_tests/__main__.py"
-profile-test = "pytest -v perf_tests/test_profile.py"
+profile-test = "pytest -v perf_tests/test_profile*.py"
 
 
 [tool.pixi.feature.py311.dependencies]

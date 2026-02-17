@@ -9,11 +9,12 @@ from pathlib import Path
 
 import boto3
 import pytest
+from botocore.client import Config
 
 from signurlarity import Client
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def rustfs_server():
     """Spawn a test rustfs image."""
     AWS_ACCESS_KEY_ID = "rustfsadmin"
@@ -154,7 +155,12 @@ def test_generate_presigned_url_perf(rustfs_server, perf_test_dir):
     # Extract region from endpoint_url
     region = "us-east-1"
 
-    boto_client = boto3.client("s3", region_name=region, **rustfs_server)
+    boto_client = boto3.client(
+        "s3",
+        region_name=region,
+        **rustfs_server,
+        config=Config(signature_version="s3v4"),
+    )
     light_client = Client(**rustfs_server)
 
     # custom_generator = S3PresignedURLGenerator(
