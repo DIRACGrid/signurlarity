@@ -168,6 +168,7 @@ async def s3_clients_aio(request):
         except Exception:
             await boto_client.create_bucket(Bucket=BUCKET_NAME)
         yield boto_client, async_light_client
+        await async_light_client.close()
 
 
 @pytest.mark.asyncio

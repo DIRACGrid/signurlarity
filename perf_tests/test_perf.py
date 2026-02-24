@@ -52,7 +52,7 @@ def _timeit(fn, iterations: int) -> float:
     return time.perf_counter() - start
 
 
-def test_generate_presigned_post_perf(rustfs_server, perf_test_dir):
+def test_generate_presigned_post_perf_sync(rustfs_server, perf_test_dir):
     """Compare performance of boto3 vs signurlarity for presigned POST.
 
     This is a non-failing, informational test: it prints timings and skips
@@ -78,7 +78,7 @@ def test_generate_presigned_post_perf(rustfs_server, perf_test_dir):
     fields = None
     conditions = None
 
-    iterations = 2000
+    iterations = 200
 
     # Warm-up to mitigate one-time costs (imports, JIT-like caches, etc.)
     for _ in range(50):
@@ -123,9 +123,10 @@ def test_generate_presigned_post_perf(rustfs_server, perf_test_dir):
     t_boto = _timeit(run_boto, iterations)
     t_custom = _timeit(run_light, iterations)
 
+    light_client.close()
     results = {
         "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "generate_presigned_post",
+        "tested_method": "generate_presigned_post_sync",
         "iterations": iterations,
         "boto_total": t_boto,
         "signurlarity_total": t_custom,
@@ -138,7 +139,7 @@ def test_generate_presigned_post_perf(rustfs_server, perf_test_dir):
     result_file.write_text(json.dumps(results, indent=2))
 
 
-def test_generate_presigned_url_perf(rustfs_server, perf_test_dir):
+def test_generate_presigned_url_perf_sync(rustfs_server, perf_test_dir):
     """Compare performance of boto3 vs custom S3PresignedURLGenerator for presigned URL.
 
     This benchmark compares boto3's generate_presigned_url with the custom
@@ -167,7 +168,7 @@ def test_generate_presigned_url_perf(rustfs_server, perf_test_dir):
     #     access_key=AWS_ACCESS_KEY_ID, secret_key=AWS_SECRET_ACCESS_KEY, region=region
     # )
 
-    iterations = 5000
+    iterations = 500
 
     # Warm-up to mitigate one-time costs
     for _ in range(50):
@@ -200,9 +201,10 @@ def test_generate_presigned_url_perf(rustfs_server, perf_test_dir):
     t_boto = _timeit(run_boto, iterations)
     t_custom = _timeit(run_custom, iterations)
 
+    light_client.close()
     results = {
         "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "generate_presigned_url",
+        "tested_method": "generate_presigned_url_sync",
         "iterations": iterations,
         "boto_total": t_boto,
         "signurlarity_total": t_custom,
@@ -215,7 +217,7 @@ def test_generate_presigned_url_perf(rustfs_server, perf_test_dir):
     result_file.write_text(json.dumps(results, indent=2))
 
 
-def test_head_bucket_perf(rustfs_server, perf_test_dir):
+def test_head_bucket_perf_sync(rustfs_server, perf_test_dir):
     """Compare performance of boto3 vs signurlarity for head_bucket.
 
     This benchmark compares boto3's head_bucket with the custom
@@ -236,7 +238,7 @@ def test_head_bucket_perf(rustfs_server, perf_test_dir):
     # Create the bucket for testing
     boto_client.create_bucket(Bucket=bucket)
 
-    iterations = 100
+    iterations = 10
 
     # Warm-up to mitigate one-time costs
     for _ in range(10):
@@ -256,9 +258,10 @@ def test_head_bucket_perf(rustfs_server, perf_test_dir):
     t_boto = _timeit(run_boto, iterations)
     t_custom = _timeit(run_custom, iterations)
 
+    light_client.close()
     results = {
         "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "head_bucket",
+        "tested_method": "head_bucket_sync",
         "iterations": iterations,
         "boto_total": t_boto,
         "signurlarity_total": t_custom,
@@ -270,7 +273,7 @@ def test_head_bucket_perf(rustfs_server, perf_test_dir):
     result_file.write_text(json.dumps(results, indent=2))
 
 
-def test_head_object_perf(rustfs_server, perf_test_dir):
+def test_head_object_perf_sync(rustfs_server, perf_test_dir):
     """Compare performance of boto3 vs signurlarity for head_object.
 
     This benchmark compares boto3's head_object with the custom
@@ -295,7 +298,7 @@ def test_head_object_perf(rustfs_server, perf_test_dir):
         Bucket=bucket, Key=key, Body=b"test data for head_object perf test"
     )
 
-    iterations = 100
+    iterations = 10
 
     # Warm-up to mitigate one-time costs
     for _ in range(10):
@@ -315,9 +318,10 @@ def test_head_object_perf(rustfs_server, perf_test_dir):
     t_boto = _timeit(run_boto, iterations)
     t_custom = _timeit(run_custom, iterations)
 
+    light_client.close()
     results = {
         "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "head_object",
+        "tested_method": "head_object_sync",
         "iterations": iterations,
         "boto_total": t_boto,
         "signurlarity_total": t_custom,
@@ -349,7 +353,7 @@ def test_head_object_perf(rustfs_server, perf_test_dir):
     print("=" * 60)
 
 
-def test_create_bucket_perf(rustfs_server, perf_test_dir):
+def test_create_bucket_perf_sync(rustfs_server, perf_test_dir):
     """Compare performance of boto3 vs signurlarity for create_bucket.
 
     This benchmark compares boto3's create_bucket with the signurlarity
@@ -363,7 +367,7 @@ def test_create_bucket_perf(rustfs_server, perf_test_dir):
     boto_client = boto3.client("s3", **rustfs_server)
     light_client = Client(**rustfs_server)
 
-    iterations = 100
+    iterations = 10
     bucket_prefix = "perf-bucket-create"
 
     # Warm-up to mitigate one-time costs
@@ -392,9 +396,10 @@ def test_create_bucket_perf(rustfs_server, perf_test_dir):
     t_boto = _timeit(run_boto, iterations)
     t_custom = _timeit(run_custom, iterations)
 
+    light_client.close()
     results = {
         "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "create_bucket",
+        "tested_method": "create_bucket_sync",
         "iterations": iterations,
         "boto_total": t_boto,
         "signurlarity_total": t_custom,

@@ -177,6 +177,7 @@ def s3_clients(request):
         if exx.response["Error"]["Code"] == "404":
             boto_client.create_bucket(Bucket=BUCKET_NAME)
     yield boto_client, light_client
+    light_client.close()
 
 
 def test_create_bucket(s3_clients):
