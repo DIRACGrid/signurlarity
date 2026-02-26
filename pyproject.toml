@@ -55,7 +55,7 @@ asyncio_mode = "auto"
 
 
 [tool.ruff]
-src = ["src", "tests", "benchmark_tests","profiling_tests"]
+src = ["src", "tests", "benchmark_tests", "profiling_tests"]
 # exclude = ["diracx-client/src/diracx/client"]
 
 [tool.ruff.lint]
@@ -130,14 +130,14 @@ signurlarity = { path = ".", editable = true }
 [tool.pixi.feature.pre-commit.dependencies]
 pre-commit = "*"
 [tool.pixi.feature.pre-commit.tasks]
-pre-commit = "pre-commit"
+pre-commit = { cmd = "pre-commit", description = "Run pre-commit" }
 
 
 [tool.pixi.tasks]
-unit-test = "pytest -v"
-benchmark = "pytest -v benchmark_tests/"
-display-benchmark-comparison = "python benchmark_tests/__main__.py"
-profile-test = "pytest -v profiling_tests/"
+unit-test = {cmd = "pytest -v", description = "Run the unit tests"}
+benchmark = { cmd = "pytest -v benchmark_tests/", description = "Run a benchmark comparison against boto" }
+display-benchmark-comparison = {cmd = "python benchmark_tests/__main__.py", description = "Display in a human readable way the benchmark comparison"}
+profile-test = {cmd = "pytest -v profiling_tests/", description="Run profiling of the methods"}
 
 
 [tool.pixi.feature.py311.dependencies]
@@ -153,26 +153,28 @@ python = "3.13.*"
 python = "3.14.*"
 
 
-[tool.pixi.tasks.perf-comparison]
+[tool.pixi.tasks.full-benchmark]
+args = ["test_results_dir"]
+description = "Run benchmark for all the python versions and display the output"
 depends-on = [
-  { task = "perf-test", environment = "py311", args = [
+  { task = "benchmark", environment = "py311", args = [
     "--test-results-dir",
-    "/tmp/perf_test/",
+    "{{ test_results_dir }}",
   ] },
-  { task = "perf-test", environment = "py312", args = [
+  { task = "benchmark", environment = "py312", args = [
     "--test-results-dir",
-    "/tmp/perf_test/",
+    "{{ test_results_dir }}",
   ] },
-  { task = "perf-test", environment = "py313", args = [
+  { task = "benchmark", environment = "py313", args = [
     "--test-results-dir",
-    "/tmp/perf_test/",
+    "{{ test_results_dir }}",
   ] },
-  { task = "perf-test", environment = "py314", args = [
+  { task = "benchmark", environment = "py314", args = [
     "--test-results-dir",
-    "/tmp/perf_test/",
+    "{{ test_results_dir }}",
   ] },
   { task = "display-benchmark-comparison", environment = "py314", args = [
     "--test-results-dir",
-    "/tmp/perf_test/",
+    "{{ test_results_dir }}",
   ] },
 ]

@@ -1,6 +1,7 @@
 # SignURLarity
 
-Lightweight library to presign URLs compatible with what boto does.
+Lightweight library to expose some of boto3 and aioboto libraries for S3 storages.
+The aim of SignURLarity is not to expose everything, but rather to be faster at it, mostly for the signed URL parts.
 
 ## Installation
 
@@ -8,77 +9,14 @@ Lightweight library to presign URLs compatible with what boto does.
 pip install signurlarity
 ```
 
-## tests
+## Usage
 
-[installation pixi](https://pixi.sh/latest/advanced/installation/)
+### Synchronous client
 
-This will run functionnal tests.
-It will spawn docker container to test against `rustfs`
+The recommended way is to use the context manager
 
-```bash
-pixi run unit-test # add any pytest option you want
-```
-
-Any `pytest` argument can be added
-
-## pre-commit
-
-SignURLarity uses [`pre-commit`](https://pre-commit.com/) to format code and check for issues.
-The easiest way to use `pre-commit` is to run the following after cloning:
-
-```bash
-pixi run pre-commit install
-```
-
-This will result in pre-commit being ran automatically each time you run `git commit`.
-If you want to explicitly run pre-commit you can use:
-
-```bash
-pixi run pre-commit # (1)!
-pixi run pre-commit --all-files # (2)!
-```
-
-1. Runs `pre-commit` only for files which are uncommitted or which have been changed.
-2. Runs `pre-commit` for all files even if you haven't changed them.
-
-
-## Perf tests
-
-For a full performance comparison, run
-
-```bash
-pixi run perf-comparison
-```
-
-This will compare the results of `boto` and `signurlarity` against rustfs for python version 3.11, 3.12, 3.13 and 3.14, and generate `json` files in `/tmp/perf_test`
-
-If you want to run it for a specific version only:
-
-```bash
-pixi run -e py314 benchmark --test-results-dir=/whatever/you/want
-```
-
-you can then display it with
-
-```bash
-pixi run -e py314 display-benchmark-comparison --test-results-dir=/whatever/you/want
-```
-
-## Connection Pooling
-
-SignURLarity now uses connection pooling for better performance. Both the synchronous `Client` and asynchronous `AsyncClient` maintain a single `httpx.Client` or `httpx.AsyncClient` instance respectively, which is reused across all requests.
-
-### Benefits
-
-- **Better Performance**: Connections are reused instead of being created and destroyed for each request
-- **Lower Overhead**: No TCP handshake or TLS negotiation overhead for subsequent requests
-- **HTTP/2 Support**: Proper connection multiplexing for HTTP/2
-- **Automatic Cleanup**: Context managers handle resource management automatically
-
-### Usage
 
 ```python
-# Synchronous client with context manager (recommended)
 from signurlarity import Client
 
 with Client(
@@ -98,7 +36,20 @@ with Client(
         ExpiresIn=3600,
     )
 # HTTP client is automatically closed when exiting the context
+```
 
+If the client is used directly, it needs to be closed
+
+```python
+client = Client(...)
+...
+client.close()
+```
+
+### Asynchronous client with context manager (recommended)
+
+
+```python
 # Async client with context manager (recommended)
 from signurlarity.aio import AsyncClient
 
@@ -121,9 +72,76 @@ async with AsyncClient(
 # HTTP client is automatically closed when exiting the context
 ```
 
-## Profiling tests
 
-You can run profiling tests
+If the client is used directly, it needs to be closed
+
+```python
+client = AsyncClient(...)
+...
+await client.close()
+```
+
+## Development
+
+### Run tests
+
+[installation pixi](https://pixi.sh/latest/advanced/installation/)
+
+This will run functionnal tests.
+It will spawn docker container to test against `rustfs`, `minio` and `moto`
+
+```bash
+pixi run unit-test # add any pytest option you want
+```
+
+Any `pytest` argument can be added
+
+### pre-commit
+
+SignURLarity uses [`pre-commit`](https://pre-commit.com/) to format code and check for issues.
+The easiest way to use `pre-commit` is to run the following after cloning:
+
+```bash
+pixi run pre-commit install
+```
+
+This will result in pre-commit being ran automatically each time you run `git commit`.
+If you want to explicitly run pre-commit you can use:
+
+```bash
+pixi run pre-commit # (1)!
+pixi run pre-commit --all-files # (2)!
+```
+
+1. Runs `pre-commit` only for files which are uncommitted or which have been changed.
+2. Runs `pre-commit` for all files even if you haven't changed them.
+
+
+### Benchmark
+
+For a full performance comparison, run
+
+```bash
+pixi run full-benchmark /whatever/outputdir
+```
+
+This will compare the results of `boto` and `signurlarity` against rustfs for python version 3.11, 3.12, 3.13 and 3.14, and generate `json` files in the output directoty
+
+If you want to run it for a specific version only:
+
+```bash
+pixi run -e py314 benchmark --test-results-dir=/whatever/you/want
+```
+
+you can then display it with
+
+```bash
+pixi run -e py314 display-benchmark-comparison --test-results-dir=/whatever/you/want
+```
+
+### Profiling tests
+
+A few profiling tests are available
 
 
 ```bash
