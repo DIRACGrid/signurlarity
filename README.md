@@ -64,6 +64,63 @@ you can then display it with
 pixi run -e py314 display-perf-comparison --perf-test-dir=/whatever/you/want
 ```
 
+## Connection Pooling
+
+SignURLarity now uses connection pooling for better performance. Both the synchronous `Client` and asynchronous `AsyncClient` maintain a single `httpx.Client` or `httpx.AsyncClient` instance respectively, which is reused across all requests.
+
+### Benefits
+
+- **Better Performance**: Connections are reused instead of being created and destroyed for each request
+- **Lower Overhead**: No TCP handshake or TLS negotiation overhead for subsequent requests
+- **HTTP/2 Support**: Proper connection multiplexing for HTTP/2
+- **Automatic Cleanup**: Context managers handle resource management automatically
+
+### Usage
+
+```python
+# Synchronous client with context manager (recommended)
+from signurlarity import Client
+
+with Client(
+    endpoint_url="https://s3.us-west-2.amazonaws.com",
+    aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
+    aws_secret_access_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+) as client:
+    # All requests in this block use the same HTTP client
+    url1 = client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": "mybucket", "Key": "file1.txt"},
+        ExpiresIn=3600,
+    )
+    url2 = client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": "mybucket", "Key": "file2.txt"},
+        ExpiresIn=3600,
+    )
+# HTTP client is automatically closed when exiting the context
+
+# Async client with context manager (recommended)
+from signurlarity.aio import AsyncClient
+
+async with AsyncClient(
+    endpoint_url="https://s3.us-west-2.amazonaws.com",
+    aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
+    aws_secret_access_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+) as client:
+    # All requests in this block use the same HTTP client
+    url1 = await client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": "mybucket", "Key": "file1.txt"},
+        ExpiresIn=3600,
+    )
+    url2 = await client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": "mybucket", "Key": "file2.txt"},
+        ExpiresIn=3600,
+    )
+# HTTP client is automatically closed when exiting the context
+```
+
 ## Profiling tests
 
 You can run profiling tests

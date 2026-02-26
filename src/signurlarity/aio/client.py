@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -18,7 +18,8 @@ class AsyncClient:
     """Async S3 client for generating presigned URLs.
 
     This is a lightweight, boto3-compatible async client that focuses on presigned URL
-    generation without the boto3 dependency overhead.
+    generation without the boto3 dependency overhead. Uses connection pooling
+    for better performance.
 
     Args:
         endpoint_url: S3 endpoint URL (e.g., 'https://s3.amazonaws.com' or
@@ -27,6 +28,7 @@ class AsyncClient:
         aws_secret_access_key: AWS secret access key
 
     Example:
+        >>> # Basic async usage
         >>> client = AsyncClient(
         ...     endpoint_url="https://s3.us-west-2.amazonaws.com",
         ...     aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
@@ -37,11 +39,33 @@ class AsyncClient:
         ...     Params={"Bucket": "mybucket", "Key": "mykey"},
         ...     ExpiresIn=3600,
         ... )
+        >>> await client.close()
+
+        >>> # Using async context manager for automatic cleanup
+        >>> async with AsyncClient(
+        ...     endpoint_url="https://s3.us-west-2.amazonaws.com",
+        ...     aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
+        ...     aws_secret_access_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        ... ) as client:
+        ...     url = await client.generate_presigned_url(
+        ...         "get_object",
+        ...         Params={"Bucket": "mybucket", "Key": "mykey"},
+        ...         ExpiresIn=3600,
+        ...     )
+
+    Note:
+        This client uses connection pooling via httpx.AsyncClient() for better
+        performance. The same HTTP client instance is reused across multiple
+        requests, reducing connection overhead and enabling HTTP/2 benefits.
 
     """
 
     def __init__(
-        self, endpoint_url: str, aws_access_key_id: str, aws_secret_access_key: str
+        self,
+        endpoint_url: str,
+        aws_access_key_id: str,
+        aws_secret_access_key: str,
+        httpx_max_connections: Optional[int] = None,
     ):
         self.endpoint_url = endpoint_url
         self.aws_access_key_id = aws_access_key_id
@@ -57,6 +81,12 @@ class AsyncClient:
             region=self.region,
             endpoint_url=endpoint_url,
         )
+
+        # Initialize HTTP client for connection pooling
+        limits = httpx._config.DEFAULT_LIMITS
+        if httpx_max_connections:
+            limits.max_connections = httpx_max_connections
+        self._http_client = httpx.AsyncClient(limits=limits)
 
     def _extract_region(self, endpoint_url: str) -> str:
         """Extract AWS region from endpoint URL.
@@ -132,7 +162,10 @@ class AsyncClient:
     async def _execute_request(
         self, method: str, url: str, headers: dict[str, str], body: bytes = b""
     ) -> httpx.Response:
-        """Execute an HTTP request.
+        """Execute an HTTP request using connection pooling.
+
+        Uses the instance's httpx.AsyncClient for connection pooling, reusing
+        the same HTTP connection across multiple requests for better performance.
 
         Args:
             method: HTTP method (GET, PUT, HEAD, DELETE, etc.)
@@ -148,17 +181,16 @@ class AsyncClient:
 
         """
         try:
-            async with httpx.AsyncClient() as client:
-                if method == "HEAD":
-                    return await client.head(url, headers=headers)
-                elif method == "PUT":
-                    return await client.put(url, headers=headers, content=body)
-                elif method == "GET":
-                    return await client.get(url, headers=headers)
-                elif method == "DELETE":
-                    return await client.delete(url, headers=headers)
-                else:
-                    raise PresignError(f"Unsupported HTTP method: {method}")
+            if method == "HEAD":
+                return await self._http_client.head(url, headers=headers)
+            elif method == "PUT":
+                return await self._http_client.put(url, headers=headers, content=body)
+            elif method == "GET":
+                return await self._http_client.get(url, headers=headers)
+            elif method == "DELETE":
+                return await self._http_client.delete(url, headers=headers)
+            else:
+                raise PresignError(f"Unsupported HTTP method: {method}")
         except httpx.HTTPError as e:
             raise PresignError(f"Failed to execute {method} request: {str(e)}") from e
         except Exception as e:
@@ -298,6 +330,19 @@ class AsyncClient:
             "list_objects_v2": "GET",
         }
         return method_map.get(client_method.lower(), "GET")
+
+    async def __aenter__(self):
+        """Async context manager entry point."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit point - close the HTTP client."""
+        await self.close()
+        return False
+
+    async def close(self):
+        """Ensure HTTP client is closed."""
+        await self._http_client.aclose()
 
     async def head_bucket(self, Bucket: str, **kwargs):
         """Check if a bucket exists and is accessible.
