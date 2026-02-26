@@ -55,13 +55,13 @@ This will compare the results of `boto` and `signurlarity` against rustfs for py
 If you want to run it for a specific version only:
 
 ```bash
-pixi run -e py314 perf-test --perf-test-dir=/whatever/you/want
+pixi run -e py314 benchmark --test-results-dir=/whatever/you/want
 ```
 
 you can then display it with
 
 ```bash
-pixi run -e py314 display-perf-comparison --perf-test-dir=/whatever/you/want
+pixi run -e py314 display-benchmark-comparison --test-results-dir=/whatever/you/want
 ```
 
 ## Connection Pooling
@@ -127,7 +127,7 @@ You can run profiling tests
 
 
 ```bash
-pixi run -e py314 profile-test -s --perf-test-dir=/whatever/you/want
+pixi run -e py314 profile-test -s --test-results-dir=/whatever/you/want
 ```
 
 This will generate `prof` [files](https://docs.python.org/3/library/profile.html)

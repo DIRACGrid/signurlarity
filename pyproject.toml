@@ -55,7 +55,7 @@ asyncio_mode = "auto"
 
 
 [tool.ruff]
-src = ["src", "tests", "perf_tests"]
+src = ["src", "tests", "benchmark_tests","profiling_tests"]
 # exclude = ["diracx-client/src/diracx/client"]
 
 [tool.ruff.lint]
@@ -135,9 +135,9 @@ pre-commit = "pre-commit"
 
 [tool.pixi.tasks]
 unit-test = "pytest -v"
-perf-test = "pytest -v perf_tests/test_perf*.py"
-display-perf-comparison = "python perf_tests/__main__.py"
-profile-test = "pytest -v perf_tests/test_profile*.py"
+benchmark = "pytest -v benchmark_tests/"
+display-benchmark-comparison = "python benchmark_tests/__main__.py"
+profile-test = "pytest -v profiling_tests/"
 
 
 [tool.pixi.feature.py311.dependencies]
@@ -156,23 +156,23 @@ python = "3.14.*"
 [tool.pixi.tasks.perf-comparison]
 depends-on = [
   { task = "perf-test", environment = "py311", args = [
-    "--perf-test-dir",
+    "--test-results-dir",
     "/tmp/perf_test/",
   ] },
   { task = "perf-test", environment = "py312", args = [
-    "--perf-test-dir",
+    "--test-results-dir",
     "/tmp/perf_test/",
   ] },
   { task = "perf-test", environment = "py313", args = [
-    "--perf-test-dir",
+    "--test-results-dir",
     "/tmp/perf_test/",
   ] },
   { task = "perf-test", environment = "py314", args = [
-    "--perf-test-dir",
+    "--test-results-dir",
     "/tmp/perf_test/",
   ] },
-  { task = "display-perf-comparison", environment = "py314", args = [
-    "--perf-test-dir",
+  { task = "display-benchmark-comparison", environment = "py314", args = [
+    "--test-results-dir",
     "/tmp/perf_test/",
   ] },
 ]

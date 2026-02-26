@@ -42,4 +42,4 @@ repos:
           - pydantic
           - types-aiobotocore[essential]
           - boto3-stubs[essential]
-        exclude: ^(tests|perf_tests)
+        exclude: tests
