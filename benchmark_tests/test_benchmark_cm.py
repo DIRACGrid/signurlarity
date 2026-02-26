@@ -4,52 +4,14 @@ import json
 import os
 import random
 import sys
-import time
 from pathlib import Path
 
 import boto3
 import pytest
 from botocore.client import Config
 
+from conftest import _timeit
 from signurlarity import Client
-
-
-@pytest.fixture(scope="module")
-def rustfs_server():
-    """Spawn a test rustfs image."""
-    AWS_ACCESS_KEY_ID = "rustfsadmin"
-    AWS_SECRET_ACCESS_KEY = "rustfsadmin"  # noqa: S105
-    import subprocess
-
-    cmd = [
-        "docker",
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        "rustfs_local",
-        "-p",
-        "9000:9000",
-        "-p",
-        "9001:9001",
-        "rustfs/rustfs:latest",
-        "/data",
-    ]
-    # print(shlex.join(cmd))
-    subprocess.run(cmd, check=True)  # noqa: S603
-    yield {
-        "endpoint_url": "http://localhost:9000",
-        "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-    }
-    cmd = ["docker", "stop", "rustfs_local"]
-    subprocess.run(cmd, check=True)  # noqa: S603
-
-
-def _timeit(fn, iterations: int) -> float:
-    start = time.perf_counter()
-    fn(iterations)
-    return time.perf_counter() - start
 
 
 def test_generate_presigned_post_perf_sync_cm(rustfs_server, test_results_dir):

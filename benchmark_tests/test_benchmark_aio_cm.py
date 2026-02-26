@@ -4,7 +4,6 @@ import json
 import os
 import random
 import sys
-import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,50 +11,8 @@ import pytest
 from aiobotocore.session import get_session
 from botocore.client import Config
 
+from conftest import _timeit_async_helper
 from signurlarity.aio import AsyncClient
-
-
-@pytest.fixture(scope="module")
-def rustfs_server():
-    """Spawn a test rustfs image."""
-    AWS_ACCESS_KEY_ID = "rustfsadmin"
-    AWS_SECRET_ACCESS_KEY = "rustfsadmin"  # noqa: S105
-    import subprocess
-
-    cmd = [
-        "docker",
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        "rustfs_local",
-        "-p",
-        "9000:9000",
-        "-p",
-        "9001:9001",
-        "rustfs/rustfs:latest",
-        "/data",
-    ]
-    # print(shlex.join(cmd))
-    subprocess.run(cmd, check=True)  # noqa: S603
-    import time
-
-    time.sleep(1)
-    yield {
-        "endpoint_url": "http://localhost:9000",
-        "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-    }
-    cmd = ["docker", "stop", "rustfs_local"]
-    subprocess.run(cmd, check=True)  # noqa: S603
-
-
-def _timeit_async(fn, iterations: int) -> float:
-    import asyncio
-
-    start = time.perf_counter()
-    asyncio.run(fn(iterations))
-    return time.perf_counter() - start
 
 
 @pytest.mark.asyncio
@@ -141,12 +98,6 @@ async def test_generate_presigned_post_perf_aio_cm(rustfs_server, test_results_d
 
             print(results)
             result_file.write_text(json.dumps(results, indent=2))
-
-
-async def _timeit_async_helper(fn, iterations: int) -> float:
-    start = time.perf_counter()
-    await fn(iterations)
-    return time.perf_counter() - start
 
 
 @pytest.mark.asyncio
