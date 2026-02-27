@@ -1,0 +1,51 @@
+name: Post perf comparison comment
+
+on:
+  workflow_run:
+    workflows: ["Basic Tests"]
+    types: [completed]
+
+jobs:
+  comment:
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download perf data
+        uses: actions/download-artifact@v7
+        with:
+          name: perf-comment
+          path: ${{ runner.temp }}/perf_tests/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout base repo
+        uses: actions/checkout@v6
+        with:
+          ref: master
+      - uses: prefix-dev/setup-pixi@v0.9.3
+        with:
+          run-install: false
+          post-cleanup: false
+      - name: Apply workarounds
+        run: |
+          sed -i.bak 's@editable = true@editable = false@g' pyproject.toml
+          rm pyproject.toml.bak
+      - name: Render comparison
+        run: |
+          pixi run -e py314 display-benchmark-comparison \
+            --test-results-dir ${{ runner.temp }}/perf_tests/ \
+            --md-output ${{ runner.temp }}/perf_tests/pretty.md
+      - name: Post comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "" ]; then
+            echo "No PR number found, skipping"
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --body-file ${{ runner.temp }}/perf_tests/pretty.md
