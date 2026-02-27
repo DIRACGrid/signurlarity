@@ -1,4 +1,9 @@
-"""AWS Signature V4 presigned URL generator - pure stdlib implementation."""
+"""AWS Signature V4 presigned URL generator - pure stdlib implementation.
+
+This module provides a lightweight implementation of AWS Signature Version 4
+signing for S3 operations, focusing on presigned URL and POST policy generation
+without requiring the boto3 dependency.
+"""
 
 from __future__ import annotations
 
@@ -15,13 +20,44 @@ from cryptography.hazmat.primitives import hashes, hmac
 class S3Presigner:
     """Generate presigned URLs for S3 operations using AWS Signature Version 4.
 
-    This implementation uses only Python stdlib (no boto3 dependency) for
-    significantly faster URL generation.
+    This implementation uses cryptography for HMAC operations but avoids the
+    boto3 dependency, resulting in significantly faster presigned URL generation.
+    It supports both presigned GETs/PUTs and POST policies for browser uploads.
 
     Args:
         access_key: AWS access key ID
         secret_key: AWS secret access key
-        region: AWS region (default: us-east-1)
+        region: AWS region (default: 'us-east-1')
+        endpoint_url: Optional custom S3 endpoint (for S3-compatible services)
+
+    Example:
+        >>> # Basic presigned URL generation
+        >>> presigner = S3Presigner(
+        ...     access_key="AKIAIOSFODNN7EXAMPLE",
+        ...     secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        ...     region="us-west-2",
+        ... )
+        >>> url = presigner.generate_presigned_url(
+        ...     bucket="mybucket",
+        ...     key="myfile.txt",
+        ...     method="GET",
+        ...     expires=3600,
+        ... )
+
+        >>> # Generate POST policy for browser uploads
+        >>> post_data = presigner.generate_presigned_post(
+        ...     bucket="mybucket",
+        ...     key="uploads/photo.jpg",
+        ...     fields={"acl": "public-read"},
+        ...     conditions=[["content-length-range", 0, 10485760]],
+        ...     expires=3600,
+        ... )
+        >>> # Use post_data['url'] and post_data['fields'] in HTML form
+
+    Note:
+        All timestamps are in UTC. Presigned URLs expire after the specified
+        duration (max 7 days). The presigner supports both standard AWS S3
+        endpoints and custom S3-compatible endpoints.
 
     """
 
@@ -87,20 +123,54 @@ class S3Presigner:
         expires: int = 3600,
         timestamp: Optional[datetime] = None,
     ) -> str:
-        """Generate a presigned URL for an S3 object.
+        """Generate a presigned URL for an S3 object operation.
+
+        Creates a time-limited URL that grants temporary access to an S3 object
+        without requiring AWS credentials. The URL includes AWS Signature V4
+        authentication parameters in the query string.
 
         Args:
             bucket: S3 bucket name
-            key: Object key (path in bucket)
-            method: HTTP method (GET, PUT, DELETE, etc.)
-            expires: URL expiration time in seconds (max 604800 / 7 days)
-            timestamp: Optional fixed timestamp (for testing)
+            key: Object key (path within the bucket)
+            method: HTTP method (GET, PUT, DELETE, HEAD, etc.). Default: 'GET'
+            expires: URL expiration time in seconds (1-604800, max 7 days). Default: 3600
+            timestamp: Optional fixed timestamp for testing. Default: current UTC time
 
         Returns:
-            Presigned URL string
+            Presigned URL string that can be used for the specified duration
 
         Raises:
-            ValueError: If expires is out of valid range
+            ValueError: If expires is not between 1 and 604800 seconds
+
+        Example:
+            >>> # Generate URL for downloading a file
+            >>> url = presigner.generate_presigned_url(
+            ...     bucket="my-bucket",
+            ...     key="documents/report.pdf",
+            ...     method="GET",
+            ...     expires=3600,  # 1 hour
+            ... )
+            >>> # Use the URL with any HTTP client
+            >>> import requests
+            >>> response = requests.get(url)
+
+            >>> # Generate URL for uploading a file
+            >>> upload_url = presigner.generate_presigned_url(
+            ...     bucket="my-bucket",
+            ...     key="uploads/new-file.txt",
+            ...     method="PUT",
+            ...     expires=900,  # 15 minutes
+            ... )
+            >>> # Use the URL to upload
+            >>> import requests
+            >>> with open("local-file.txt", "rb") as f:
+            ...     requests.put(upload_url, data=f)
+
+        Note:
+            - URLs are valid for the specified duration in seconds
+            - Maximum expiration is 604800 seconds (7 days)
+            - The URL contains authentication in query parameters
+            - Anyone with the URL can access the object during the validity period
 
         """
         if expires < 1 or expires > 604800:
@@ -219,21 +289,61 @@ class S3Presigner:
     ) -> dict[str, str]:
         """Generate AWS Signature V4 Authorization header for an HTTP request.
 
-        This method signs actual HTTP requests (not presigned URLs) by adding an
-        Authorization header with the AWS Signature V4 signature.
+        This method signs actual HTTP requests (not presigned URLs) by adding
+        Authorization, X-Amz-Date, and X-Amz-Content-Sha256 headers with the
+        AWS Signature V4 signature. This is used for direct API calls to S3.
 
         Args:
             method: HTTP method (GET, HEAD, PUT, DELETE, etc.)
-            path: Request path (e.g., "/" for bucket, "/key" for object)
+            path: Request path relative to host (e.g., '/' for bucket, '/key' for object)
             headers: Request headers dict (must include 'host')
-            timestamp: Optional fixed timestamp (for testing)
-            body: Request body (default: empty bytes)
+            timestamp: Optional fixed timestamp for testing. Default: current UTC time
+            body: Request body bytes. Default: empty bytes
 
         Returns:
-            Updated headers dict with Authorization and X-Amz-Date headers
+            Updated headers dict including:
+                - Authorization: AWS4-HMAC-SHA256 signature
+                - X-Amz-Date: Request timestamp
+                - X-Amz-Content-Sha256: SHA256 hash of body
 
         Raises:
-            ValueError: If 'host' header is missing
+            ValueError: If 'host' header is missing from input headers
+
+        Example:
+            >>> # Sign a HEAD request to check bucket existence
+            >>> headers = {"host": "mybucket.s3.us-west-2.amazonaws.com"}
+            >>> signed_headers = presigner.sign_request_headers(
+            ...     method="HEAD",
+            ...     path="/",
+            ...     headers=headers,
+            ...     body=b"",
+            ... )
+            >>> # Use signed headers with httpx or requests
+            >>> import httpx
+            >>> response = httpx.head(
+            ...     "https://mybucket.s3.us-west-2.amazonaws.com/",
+            ...     headers=signed_headers,
+            ... )
+
+            >>> # Sign a PUT request with body
+            >>> headers = {"host": "mybucket.s3.us-west-2.amazonaws.com"}
+            >>> body = b"file content"
+            >>> signed_headers = presigner.sign_request_headers(
+            ...     method="PUT",
+            ...     path="/myfile.txt",
+            ...     headers=headers,
+            ...     body=body,
+            ... )
+            >>> import httpx
+            >>> response = httpx.put(
+            ...     "https://mybucket.s3.us-west-2.amazonaws.com/myfile.txt",
+            ...     headers=signed_headers,
+            ...     content=body,
+            ... )
+
+        Note:
+            This is for direct API requests. For presigned URLs that can be
+            shared, use generate_presigned_url() instead.
 
         """
         if "host" not in headers:
@@ -313,23 +423,82 @@ class S3Presigner:
         expires: int = 3600,
         timestamp: Optional[datetime] = None,
     ) -> dict[str, Any]:
-        """Generate a presigned POST policy for S3 uploads.
+        r"""Generate a presigned POST policy for browser-based S3 uploads.
+
+        Creates a POST policy that allows direct uploads to S3 from a browser
+        or other client without exposing AWS credentials. The policy includes
+        security conditions and is signed using AWS Signature V4.
 
         Args:
             bucket: S3 bucket name
-            key: Object key (path in bucket)
-            fields: Additional form fields to include (e.g., metadata, ACL)
-            conditions: Policy conditions for the upload
-            expires: Policy expiration time in seconds (max 604800 / 7 days)
-            timestamp: Optional fixed timestamp (for testing)
+            key: Object key (destination path in bucket)
+            fields: Additional form fields to include (e.g., metadata, ACL, content-type).
+                   Common fields: 'acl', 'Content-Type', 'x-amz-meta-*'
+            conditions: Policy conditions that uploaded content must satisfy.
+                       Examples: content-length-range, content-type matching
+            expires: Policy expiration time in seconds (1-604800, max 7 days). Default: 3600
+            timestamp: Optional fixed timestamp for testing. Default: current UTC time
 
         Returns:
             Dictionary with 'url' and 'fields' keys:
-                - url: The S3 bucket URL to POST to
-                - fields: Form fields to include in the POST request
+                - url (str): The S3 endpoint URL to POST to
+                - fields (dict): Form fields to include in the POST request
+                              (includes policy, signature, and other AWS fields)
 
         Raises:
-            ValueError: If expires is out of valid range
+            ValueError: If expires is not between 1 and 604800 seconds
+
+        Example:
+            >>> # Simple upload with public-read ACL
+            >>> post_data = presigner.generate_presigned_post(
+            ...     bucket="my-bucket",
+            ...     key="uploads/photo.jpg",
+            ...     fields={"acl": "public-read"},
+            ...     expires=3600,
+            ... )
+
+            >>> # Upload with content restrictions
+            >>> post_data = presigner.generate_presigned_post(
+            ...     bucket="my-bucket",
+            ...     key="documents/report.pdf",
+            ...     fields={
+            ...         "Content-Type": "application/pdf",
+            ...         "x-amz-meta-uploaded-by": "user123",
+            ...     },
+            ...     conditions=[
+            ...         ["content-length-range", 1024, 10485760],  # 1KB - 10MB
+            ...         ["starts-with", "$Content-Type", "application/"],
+            ...     ],
+            ...     expires=3600,
+            ... )
+
+            >>> # Use in HTML form
+            >>> html = f'''
+            ... <form action="{post_data["url"]}" method="post" enctype="multipart/form-data">
+            ... '''
+            >>> for field, value in post_data["fields"].items():
+            ...     html += f'<input type="hidden" name="{field}" value="{value}" />\\n'
+            >>> html += '''
+            ...   <input type="file" name="file" />
+            ...   <input type="submit" value="Upload" />
+            ... </form>
+            ... '''
+
+            >>> # Use with Python requests
+            >>> import requests
+            >>> with open("photo.jpg", "rb") as f:
+            ...     files = {"file": f}
+            ...     response = requests.post(
+            ...         post_data["url"],
+            ...         data=post_data["fields"],
+            ...         files=files,
+            ...     )
+
+        Note:
+            - The returned fields must be included as hidden form fields
+            - The actual file must be included as a 'file' field in the form
+            - All conditions are enforced server-side by S3
+            - The policy is valid for the specified duration
 
         """
         if expires < 1 or expires > 604800:

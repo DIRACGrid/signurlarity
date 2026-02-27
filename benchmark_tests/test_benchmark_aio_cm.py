@@ -4,7 +4,6 @@ import json
 import os
 import random
 import sys
-import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,61 +11,19 @@ import pytest
 from aiobotocore.session import get_session
 from botocore.client import Config
 
+from conftest import _timeit_async_helper
 from signurlarity.aio import AsyncClient
 
 
-@pytest.fixture(scope="module")
-def rustfs_server():
-    """Spawn a test rustfs image."""
-    AWS_ACCESS_KEY_ID = "rustfsadmin"
-    AWS_SECRET_ACCESS_KEY = "rustfsadmin"  # noqa: S105
-    import subprocess
-
-    cmd = [
-        "docker",
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        "rustfs_local",
-        "-p",
-        "9000:9000",
-        "-p",
-        "9001:9001",
-        "rustfs/rustfs:latest",
-        "/data",
-    ]
-    # print(shlex.join(cmd))
-    subprocess.run(cmd, check=True)  # noqa: S603
-    import time
-
-    time.sleep(1)
-    yield {
-        "endpoint_url": "http://localhost:9000",
-        "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-    }
-    cmd = ["docker", "stop", "rustfs_local"]
-    subprocess.run(cmd, check=True)  # noqa: S603
-
-
-def _timeit_async(fn, iterations: int) -> float:
-    import asyncio
-
-    start = time.perf_counter()
-    asyncio.run(fn(iterations))
-    return time.perf_counter() - start
-
-
 @pytest.mark.asyncio
-async def test_generate_presigned_post_perf_aio_cm(rustfs_server, perf_test_dir):
+async def test_generate_presigned_post_perf_aio_cm(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity for presigned POST (async).
 
     This is a non-failing, informational test: it prints timings and skips
     if the signurlarity implementation is not available.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_generate_presigned_post_perf_aio_cm")
+    test_dir = test_results_dir / Path("test_generate_presigned_post_perf_aio_cm")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
 
@@ -143,20 +100,14 @@ async def test_generate_presigned_post_perf_aio_cm(rustfs_server, perf_test_dir)
             result_file.write_text(json.dumps(results, indent=2))
 
 
-async def _timeit_async_helper(fn, iterations: int) -> float:
-    start = time.perf_counter()
-    await fn(iterations)
-    return time.perf_counter() - start
-
-
 @pytest.mark.asyncio
-async def test_generate_presigned_url_perf_aio_cm(rustfs_server, perf_test_dir):
+async def test_generate_presigned_url_perf_aio_cm(rustfs_server, test_results_dir):
     """Compare performance of signurlarity async for presigned URL (async).
 
     This benchmark tests the async implementation's presigned URL generation.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_generate_presigned_url_perf_aio_cm")
+    test_dir = test_results_dir / Path("test_generate_presigned_url_perf_aio_cm")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
     rng = random.Random(42)  # noqa: S311
@@ -222,13 +173,13 @@ async def test_generate_presigned_url_perf_aio_cm(rustfs_server, perf_test_dir):
 
 
 @pytest.mark.asyncio
-async def test_head_bucket_perf_aio_cm(rustfs_server, perf_test_dir):
+async def test_head_bucket_perf_aio_cm(rustfs_server, test_results_dir):
     """Compare performance of signurlarity async for head_bucket.
 
     This benchmark tests the async implementation's head_bucket functionality.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_head_bucket_perf_aio_cm")
+    test_dir = test_results_dir / Path("test_head_bucket_perf_aio_cm")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
     bucket = "perf-bucket"
@@ -277,13 +228,13 @@ async def test_head_bucket_perf_aio_cm(rustfs_server, perf_test_dir):
 
 
 @pytest.mark.asyncio
-async def test_head_object_perf_aio_cm(rustfs_server, perf_test_dir):
+async def test_head_object_perf_aio_cm(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity async for head_object.
 
     This benchmark tests the async implementation's head_object functionality.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_head_object_perf_aio_cm")
+    test_dir = test_results_dir / Path("test_head_object_perf_aio_cm")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
     bucket = "perf-object"
@@ -354,13 +305,13 @@ async def test_head_object_perf_aio_cm(rustfs_server, perf_test_dir):
 
 
 @pytest.mark.asyncio
-async def test_create_bucket_perf_aio_cm(rustfs_server, perf_test_dir):
+async def test_create_bucket_perf_aio_cm(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity async for create_bucket.
 
     This benchmark tests the async implementation's create_bucket functionality.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_create_bucket_perf_aio_cm")
+    test_dir = test_results_dir / Path("test_create_bucket_perf_aio_cm")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
 

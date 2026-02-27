@@ -4,62 +4,24 @@ import json
 import os
 import random
 import sys
-import time
 from pathlib import Path
 
 import boto3
 import pytest
 from botocore.client import Config
 
+from conftest import _timeit
 from signurlarity import Client
 
 
-@pytest.fixture(scope="module")
-def rustfs_server():
-    """Spawn a test rustfs image."""
-    AWS_ACCESS_KEY_ID = "rustfsadmin"
-    AWS_SECRET_ACCESS_KEY = "rustfsadmin"  # noqa: S105
-    import subprocess
-
-    cmd = [
-        "docker",
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        "rustfs_local",
-        "-p",
-        "9000:9000",
-        "-p",
-        "9001:9001",
-        "rustfs/rustfs:latest",
-        "/data",
-    ]
-    # print(shlex.join(cmd))
-    subprocess.run(cmd, check=True)  # noqa: S603
-    yield {
-        "endpoint_url": "http://localhost:9000",
-        "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-    }
-    cmd = ["docker", "stop", "rustfs_local"]
-    subprocess.run(cmd, check=True)  # noqa: S603
-
-
-def _timeit(fn, iterations: int) -> float:
-    start = time.perf_counter()
-    fn(iterations)
-    return time.perf_counter() - start
-
-
-def test_generate_presigned_post_perf_sync(rustfs_server, perf_test_dir):
+def test_generate_presigned_post_perf_sync(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity for presigned POST.
 
     This is a non-failing, informational test: it prints timings and skips
     if the signurlarity implementation is not available.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_generate_presigned_post_perf")
+    test_dir = test_results_dir / Path("test_generate_presigned_post_perf")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
 
@@ -139,14 +101,14 @@ def test_generate_presigned_post_perf_sync(rustfs_server, perf_test_dir):
     result_file.write_text(json.dumps(results, indent=2))
 
 
-def test_generate_presigned_url_perf_sync(rustfs_server, perf_test_dir):
+def test_generate_presigned_url_perf_sync(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs custom S3PresignedURLGenerator for presigned URL.
 
     This benchmark compares boto3's generate_presigned_url with the custom
     implementation that has zero boto3 dependencies.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_generate_presigned_url_perf")
+    test_dir = test_results_dir / Path("test_generate_presigned_url_perf")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
     rng = random.Random(42)  # noqa: S311
@@ -217,14 +179,14 @@ def test_generate_presigned_url_perf_sync(rustfs_server, perf_test_dir):
     result_file.write_text(json.dumps(results, indent=2))
 
 
-def test_head_bucket_perf_sync(rustfs_server, perf_test_dir):
+def test_head_bucket_perf_sync(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity for head_bucket.
 
     This benchmark compares boto3's head_bucket with the custom
     implementation that has zero boto3 dependencies.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_head_bucket_perf")
+    test_dir = test_results_dir / Path("test_head_bucket_perf")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
     bucket = "perf-bucket"
@@ -273,14 +235,14 @@ def test_head_bucket_perf_sync(rustfs_server, perf_test_dir):
     result_file.write_text(json.dumps(results, indent=2))
 
 
-def test_head_object_perf_sync(rustfs_server, perf_test_dir):
+def test_head_object_perf_sync(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity for head_object.
 
     This benchmark compares boto3's head_object with the custom
     implementation that has zero boto3 dependencies.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_head_object_perf")
+    test_dir = test_results_dir / Path("test_head_object_perf")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
     bucket = "perf-object"
@@ -353,14 +315,14 @@ def test_head_object_perf_sync(rustfs_server, perf_test_dir):
     print("=" * 60)
 
 
-def test_create_bucket_perf_sync(rustfs_server, perf_test_dir):
+def test_create_bucket_perf_sync(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity for create_bucket.
 
     This benchmark compares boto3's create_bucket with the signurlarity
     implementation that uses httpx with AWS Signature V4.
     """
     py_vers = sys.version_info
-    test_dir = perf_test_dir / Path("test_create_bucket_perf")
+    test_dir = test_results_dir / Path("test_create_bucket_perf")
     os.makedirs(test_dir, exist_ok=True)
     result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
 

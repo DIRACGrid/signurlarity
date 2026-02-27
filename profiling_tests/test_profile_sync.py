@@ -12,13 +12,13 @@ from signurlarity import Client
 ITERATIONS = 100_000
 
 
-def test_profile_generate_presigned_post(perf_test_dir):
+def test_profile_generate_presigned_post(test_results_dir):
     """Compare performance of boto3 vs signurlarity for presigned POST.
 
     This is a non-failing, informational test: it prints timings and skips
     if the signurlarity implementation is not available.
     """
-    test_dir = perf_test_dir / Path("profile_generate_presigned_post")
+    test_dir = test_results_dir / Path("profile_generate_presigned_post")
     os.makedirs(test_dir, exist_ok=True)
 
     rng = random.Random(42)  # noqa: S311

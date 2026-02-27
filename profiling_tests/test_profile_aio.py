@@ -13,12 +13,12 @@ from signurlarity.aio import AsyncClient
 ITERATIONS = 100_000
 
 
-def test_profile_generate_presigned_post_aio(perf_test_dir):
+def test_profile_generate_presigned_post_aio(test_results_dir):
     """Compare performance of signurlarity async for presigned POST.
 
     This is a non-failing, informational test: it prints profiling info.
     """
-    test_dir = perf_test_dir / Path("profile_generate_presigned_post_aio")
+    test_dir = test_results_dir / Path("profile_generate_presigned_post_aio")
     os.makedirs(test_dir, exist_ok=True)
 
     rng = random.Random(42)  # noqa: S311

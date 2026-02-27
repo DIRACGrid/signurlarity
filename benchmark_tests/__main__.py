@@ -69,7 +69,7 @@ def compare_results(result_dir: Path, md_output: Optional[Path] = None):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--perf-test-dir", required=True, help="Path to the perf tests results."
+        "--test-results-dir", required=True, help="Path to the perf tests results."
     )
     parser.add_argument(
         "--md-output", required=False, help="Path to store the markdown output."
@@ -78,7 +78,7 @@ def parse_args():
     md_output = None
     if args.md_output:
         md_output = Path(args.md_output).resolve()
-    compare_results(Path(args.perf_test_dir).resolve(), md_output)
+    compare_results(Path(args.test_results_dir).resolve(), md_output)
 
 
 if __name__ == "__main__":

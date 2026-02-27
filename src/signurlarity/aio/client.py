@@ -15,20 +15,24 @@ from ..presigner import S3Presigner
 
 
 class AsyncClient:
-    """Async S3 client for generating presigned URLs.
+    """Async S3 client for generating presigned URLs and performing S3 operations.
 
     This is a lightweight, boto3-compatible async client that focuses on presigned URL
-    generation without the boto3 dependency overhead. Uses connection pooling
-    for better performance.
+    generation and basic S3 operations without the boto3 dependency overhead.
+    Uses async connection pooling via httpx for better performance in async applications.
 
     Args:
-        endpoint_url: S3 endpoint URL (e.g., 'https://s3.amazonaws.com' or
-                      'https://s3.us-west-2.amazonaws.com')
-        aws_access_key_id: AWS access key ID
-        aws_secret_access_key: AWS secret access key
+        endpoint_url: S3 endpoint URL. Examples:
+                     - AWS: 'https://s3.amazonaws.com' or 'https://s3.us-west-2.amazonaws.com'
+                     - MinIO: 'http://localhost:9000'
+                     - Custom S3-compatible services
+        aws_access_key_id: AWS access key ID for authentication
+        aws_secret_access_key: AWS secret access key for authentication
+        httpx_max_connections: Optional maximum number of connections in the pool.
+                              If not specified, uses httpx default limits.
 
     Example:
-        >>> # Basic async usage
+        >>> # Basic async usage with explicit cleanup
         >>> client = AsyncClient(
         ...     endpoint_url="https://s3.us-west-2.amazonaws.com",
         ...     aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
@@ -41,7 +45,7 @@ class AsyncClient:
         ... )
         >>> await client.close()
 
-        >>> # Using async context manager for automatic cleanup
+        >>> # Using async context manager for automatic cleanup (recommended)
         >>> async with AsyncClient(
         ...     endpoint_url="https://s3.us-west-2.amazonaws.com",
         ...     aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
@@ -53,10 +57,40 @@ class AsyncClient:
         ...         ExpiresIn=3600,
         ...     )
 
+        >>> # Using with MinIO or other S3-compatible services
+        >>> async with AsyncClient(
+        ...     endpoint_url="http://localhost:9000",
+        ...     aws_access_key_id="minioadmin",
+        ...     aws_secret_access_key="minioadmin",
+        ... ) as client:
+        ...     # Perform S3 operations asynchronously
+        ...     await client.create_bucket(Bucket="test-bucket")
+        ...     url = await client.generate_presigned_url(
+        ...         "put_object",
+        ...         Params={"Bucket": "test-bucket", "Key": "upload.txt"},
+        ...         ExpiresIn=3600,
+        ...     )
+
+        >>> # Concurrent operations with asyncio
+        >>> async with AsyncClient(...) as client:
+        ...     urls = await asyncio.gather(
+        ...         client.generate_presigned_url(
+        ...             "get_object", {"Bucket": "b1", "Key": "k1"}
+        ...         ),
+        ...         client.generate_presigned_url(
+        ...             "get_object", {"Bucket": "b2", "Key": "k2"}
+        ...         ),
+        ...         client.generate_presigned_url(
+        ...             "get_object", {"Bucket": "b3", "Key": "k3"}
+        ...         ),
+        ...     )
+
     Note:
-        This client uses connection pooling via httpx.AsyncClient() for better
-        performance. The same HTTP client instance is reused across multiple
-        requests, reducing connection overhead and enabling HTTP/2 benefits.
+        This client uses async connection pooling via httpx.AsyncClient() for better
+        performance in async applications. The same HTTP client instance is reused
+        across multiple requests, reducing connection overhead and enabling HTTP/2 benefits.
+        Always use the async context manager or call await close() to properly clean up
+        connections.
 
     """
 
@@ -228,6 +262,7 @@ class AsyncClient:
             https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/generate_presigned_post.html
 
         Example:
+            >>> # Simple POST with ACL
             >>> post_data = await client.generate_presigned_post(
             ...     Bucket="mybucket",
             ...     Key="myfile.txt",
@@ -236,6 +271,33 @@ class AsyncClient:
             ...     ExpiresIn=3600,
             ... )
             >>> # Use post_data['url'] and post_data['fields'] for upload
+
+            >>> # POST with metadata and content restrictions
+            >>> post_data = await client.generate_presigned_post(
+            ...     Bucket="uploads",
+            ...     Key="photos/vacation.jpg",
+            ...     Fields={
+            ...         "Content-Type": "image/jpeg",
+            ...         "x-amz-meta-photographer": "john-doe",
+            ...         "acl": "private",
+            ...     },
+            ...     Conditions=[
+            ...         ["content-length-range", 1024, 5242880],  # 1KB to 5MB
+            ...         ["eq", "$Content-Type", "image/jpeg"],
+            ...     ],
+            ...     ExpiresIn=900,  # 15 minutes
+            ... )
+            >>> # Upload file asynchronously from Python
+            >>> import httpx
+            >>> async with httpx.AsyncClient() as http_client:
+            ...     with open("vacation.jpg", "rb") as f:
+            ...         files = {"file": f.read()}
+            ...         response = await http_client.post(
+            ...             post_data["url"],
+            ...             data=post_data["fields"],
+            ...             files={"file": files["file"]},
+            ...         )
+            >>> print(response.status_code)  # 204 on success
 
         """
         if not Bucket:
@@ -281,10 +343,44 @@ class AsyncClient:
             https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/generate_presigned_url.html
 
         Example:
+            >>> # Generate URL for downloading a file (GET)
             >>> url = await client.generate_presigned_url(
             ...     "get_object",
-            ...     Params={"Bucket": "mybucket", "Key": "myfile.txt"},
-            ...     ExpiresIn=3600,
+            ...     Params={"Bucket": "mybucket", "Key": "documents/report.pdf"},
+            ...     ExpiresIn=3600,  # Valid for 1 hour
+            ... )
+            >>> # Share the URL or use it with any async HTTP client
+            >>> import httpx
+            >>> async with httpx.AsyncClient() as http_client:
+            ...     response = await http_client.get(url)
+            ...     with open("downloaded_report.pdf", "wb") as f:
+            ...         f.write(response.content)
+
+            >>> # Generate URL for uploading a file (PUT)
+            >>> upload_url = await client.generate_presigned_url(
+            ...     "put_object",
+            ...     Params={"Bucket": "mybucket", "Key": "uploads/newfile.txt"},
+            ...     ExpiresIn=900,  # Valid for 15 minutes
+            ... )
+            >>> # Upload file asynchronously using the URL
+            >>> import httpx
+            >>> async with httpx.AsyncClient() as http_client:
+            ...     with open("local_file.txt", "rb") as f:
+            ...         response = await http_client.put(upload_url, content=f.read())
+            >>> print(response.status_code)  # 200 on success
+
+            >>> # Generate multiple URLs concurrently
+            >>> import asyncio
+            >>> urls = await asyncio.gather(
+            ...     client.generate_presigned_url(
+            ...         "get_object", {"Bucket": "b1", "Key": "k1"}
+            ...     ),
+            ...     client.generate_presigned_url(
+            ...         "get_object", {"Bucket": "b2", "Key": "k2"}
+            ...     ),
+            ...     client.generate_presigned_url(
+            ...         "get_object", {"Bucket": "b3", "Key": "k3"}
+            ...     ),
             ... )
 
         """

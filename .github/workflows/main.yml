@@ -87,7 +87,7 @@ jobs:
           cache: false
           environments: ${{ matrix.python-version }}
       - name: Run pytest
-        run: pixi run -e ${{ matrix.python-version }} perf-test --perf-test-dir ${{ runner.temp }}/perf_tests/
+        run: pixi run -e ${{ matrix.python-version }} benchmark --test-results-dir ${{ runner.temp }}/perf_tests/
       - name: Upload perf test result
         uses: actions/upload-artifact@v6
         with:
@@ -126,7 +126,7 @@ jobs:
           git diff
       - name: Compare tests
         run: |
-          pixi run -e py314 display-perf-comparison --perf-test-dir ${{ runner.temp }}/perf_tests/ --md-output ${{ runner.temp }}/perf_tests/pretty.md
+          pixi run -e py314 display-benchmark-comparison --test-results-dir ${{ runner.temp }}/perf_tests/ --md-output ${{ runner.temp }}/perf_tests/pretty.md
       - name: Create Comment
         if: ${{ github.event_name == 'pull_request' }}
         run:
@@ -156,7 +156,7 @@ jobs:
   #       with:
   #         environment: py314
   #     - name: Run pytest
-  #       run: pixi run -e py314 pytest -v -s perf_tests/test_profile.py --perf-test-dir ${{ runner.temp }}/profiling/
+  #       run: pixi run -e py314 pytest -v -s profiling_tests/test_profile.py --test-results-dir ${{ runner.temp }}/profiling/
   #     - name: Generate table
   #       shell: pixi run -e py314 bash -e {0}
   #       run: |
