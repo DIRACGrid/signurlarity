@@ -1,3 +1,5 @@
+"""Signurlarity - Fast S3 presigned URL generation without boto3."""
+
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError

@@ -15,20 +15,24 @@ from .presigner import S3Presigner
 
 
 class Client:
-    """S3 client for generating presigned URLs.
+    """S3 client for generating presigned URLs and performing S3 operations.
 
     This is a lightweight, boto3-compatible client that focuses on presigned URL
-    generation without the boto3 dependency overhead. Uses connection pooling
-    for better performance.
+    generation and basic S3 operations without the boto3 dependency overhead.
+    Uses connection pooling via httpx for better performance.
 
     Args:
-        endpoint_url: S3 endpoint URL (e.g., 'https://s3.amazonaws.com' or
-                      'https://s3.us-west-2.amazonaws.com')
-        aws_access_key_id: AWS access key ID
-        aws_secret_access_key: AWS secret access key
+        endpoint_url: S3 endpoint URL. Examples:
+                     - AWS: 'https://s3.amazonaws.com' or 'https://s3.us-west-2.amazonaws.com'
+                     - MinIO: 'http://localhost:9000'
+                     - Custom S3-compatible services
+        aws_access_key_id: AWS access key ID for authentication
+        aws_secret_access_key: AWS secret access key for authentication
+        httpx_max_connections: Optional maximum number of connections in the pool.
+                              If not specified, uses httpx default limits.
 
     Example:
-        >>> # Basic usage
+        >>> # Basic usage with explicit cleanup
         >>> client = Client(
         ...     endpoint_url="https://s3.us-west-2.amazonaws.com",
         ...     aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
@@ -41,7 +45,7 @@ class Client:
         ... )
         >>> client.close()
 
-        >>> # Using context manager for automatic cleanup
+        >>> # Using context manager for automatic cleanup (recommended)
         >>> with Client(
         ...     endpoint_url="https://s3.us-west-2.amazonaws.com",
         ...     aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
@@ -53,10 +57,26 @@ class Client:
         ...         ExpiresIn=3600,
         ...     )
 
+        >>> # Using with MinIO or other S3-compatible services
+        >>> with Client(
+        ...     endpoint_url="http://localhost:9000",
+        ...     aws_access_key_id="minioadmin",
+        ...     aws_secret_access_key="minioadmin",
+        ... ) as client:
+        ...     # Perform S3 operations
+        ...     client.create_bucket(Bucket="test-bucket")
+        ...     url = client.generate_presigned_url(
+        ...         "put_object",
+        ...         Params={"Bucket": "test-bucket", "Key": "upload.txt"},
+        ...         ExpiresIn=3600,
+        ...     )
+
     Note:
         This client uses connection pooling via httpx.Client() for better
         performance. The same HTTP client instance is reused across multiple
         requests, reducing connection overhead and enabling HTTP/2 benefits.
+        Always use the context manager or call close() to properly clean up
+        connections.
 
     """
 
@@ -228,6 +248,7 @@ class Client:
             https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/generate_presigned_post.html
 
         Example:
+            >>> # Simple POST with ACL
             >>> post_data = client.generate_presigned_post(
             ...     Bucket="mybucket",
             ...     Key="myfile.txt",
@@ -236,6 +257,32 @@ class Client:
             ...     ExpiresIn=3600,
             ... )
             >>> # Use post_data['url'] and post_data['fields'] for upload
+
+            >>> # POST with metadata and content restrictions
+            >>> post_data = client.generate_presigned_post(
+            ...     Bucket="uploads",
+            ...     Key="photos/vacation.jpg",
+            ...     Fields={
+            ...         "Content-Type": "image/jpeg",
+            ...         "x-amz-meta-photographer": "john-doe",
+            ...         "acl": "private",
+            ...     },
+            ...     Conditions=[
+            ...         ["content-length-range", 1024, 5242880],  # 1KB to 5MB
+            ...         ["eq", "$Content-Type", "image/jpeg"],
+            ...     ],
+            ...     ExpiresIn=900,  # 15 minutes
+            ... )
+            >>> # Upload file from Python
+            >>> import requests
+            >>> with open("vacation.jpg", "rb") as f:
+            ...     files = {"file": f}
+            ...     response = requests.post(
+            ...         post_data["url"],
+            ...         data=post_data["fields"],
+            ...         files=files,
+            ...     )
+            >>> print(response.status_code)  # 204 on success
 
         """
         if not Bucket:
@@ -282,11 +329,38 @@ class Client:
             https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/generate_presigned_url.html
 
         Example:
+            >>> # Generate URL for downloading a file (GET)
             >>> url = client.generate_presigned_url(
             ...     "get_object",
-            ...     Params={"Bucket": "mybucket", "Key": "myfile.txt"},
-            ...     ExpiresIn=3600,
+            ...     Params={"Bucket": "mybucket", "Key": "documents/report.pdf"},
+            ...     ExpiresIn=3600,  # Valid for 1 hour
             ... )
+            >>> # Share the URL or use it with any HTTP client
+            >>> import requests
+            >>> response = requests.get(url)
+            >>> with open("downloaded_report.pdf", "wb") as f:
+            ...     f.write(response.content)
+
+            >>> # Generate URL for uploading a file (PUT)
+            >>> upload_url = client.generate_presigned_url(
+            ...     "put_object",
+            ...     Params={"Bucket": "mybucket", "Key": "uploads/newfile.txt"},
+            ...     ExpiresIn=900,  # Valid for 15 minutes
+            ... )
+            >>> # Upload file using the URL
+            >>> import requests
+            >>> with open("local_file.txt", "rb") as f:
+            ...     response = requests.put(upload_url, data=f)
+            >>> print(response.status_code)  # 200 on success
+
+            >>> # Generate URL for deleting an object
+            >>> delete_url = client.generate_presigned_url(
+            ...     "delete_object",
+            ...     Params={"Bucket": "mybucket", "Key": "old_file.txt"},
+            ...     ExpiresIn=300,  # Valid for 5 minutes
+            ... )
+            >>> import requests
+            >>> response = requests.delete(delete_url)
 
         """
         if Params is None:
