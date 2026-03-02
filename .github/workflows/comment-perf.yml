@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      contents: read
     steps:
       - name: Download perf data
         uses: actions/download-artifact@v7
@@ -43,9 +44,33 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "" ]; then
+          # Method 1: PR number saved in artifact by the upstream workflow
+          PR_NUMBER=""
+          if [ -f "${{ runner.temp }}/perf_tests/pr_number.txt" ]; then
+            PR_NUMBER=$(cat "${{ runner.temp }}/perf_tests/pr_number.txt")
+            echo "Got PR number from artifact file: ${PR_NUMBER}"
+          fi
+
+          # Method 2: PR number from the workflow_run event payload
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
+            if [ -n "$PR_NUMBER" ]; then
+              echo "Got PR number from event payload: ${PR_NUMBER}"
+            fi
+          fi
+
+          # Method 3: Query GitHub API using the head SHA
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Querying GitHub API for PR associated with head SHA ${{ github.event.workflow_run.head_sha }}"
+            PR_NUMBER=$(gh api "repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls?state=open" --jq '.[0].number // empty' 2>/dev/null || true)
+            if [ -n "$PR_NUMBER" ]; then
+              echo "Got PR number from GitHub API: ${PR_NUMBER}"
+            fi
+          fi
+
+          if [ -z "$PR_NUMBER" ]; then
             echo "No PR number found, skipping"
             exit 0
           fi
+          echo "Posting comment to PR #${PR_NUMBER}"
           gh pr comment "$PR_NUMBER" --body-file ${{ runner.temp }}/perf_tests/pretty.md
