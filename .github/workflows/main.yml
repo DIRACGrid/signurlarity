@@ -100,7 +100,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - name: Download math result for job 1
         uses: actions/download-artifact@v7
@@ -127,14 +126,12 @@ jobs:
       - name: Compare tests
         run: |
           pixi run -e py314 display-benchmark-comparison --test-results-dir ${{ runner.temp }}/perf_tests/ --md-output ${{ runner.temp }}/perf_tests/pretty.md
-      - name: Create Comment
+      - name: Upload perf comparison data
         if: ${{ github.event_name == 'pull_request' }}
-        run:
-          gh pr comment $PRNUM --body-file ${{ runner.temp }}/perf_tests/pretty.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PRNUM: ${{ github.event.pull_request.number }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: perf-comment
+          path: ${{ runner.temp }}/perf_tests/
 
   # run-profiling:
   #   name: Profile presigned URLs
