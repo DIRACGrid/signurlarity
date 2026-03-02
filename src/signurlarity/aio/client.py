@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import xml.etree.ElementTree as ET
+from base64 import b64encode
 from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
 
@@ -223,6 +226,10 @@ class AsyncClient:
                 return await self._http_client.get(url, headers=headers)
             elif method == "DELETE":
                 return await self._http_client.delete(url, headers=headers)
+            elif method == "POST":
+                return await self._http_client.post(
+                    url, headers=headers, content=body
+                )
             else:
                 raise PresignError(f"Unsupported HTTP method: {method}")
         except httpx.HTTPError as e:
@@ -704,6 +711,193 @@ class AsyncClient:
 
         return {
             "Location": location,
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+    async def delete_objects(self, Bucket: str, Delete: dict[str, Any], **kwargs):
+        """Delete multiple objects from an S3 bucket in a single request.
+
+        Performs a multi-object delete using a POST request with the ``?delete``
+        query parameter and an XML body listing the objects to remove.
+
+        Args:
+            Bucket: S3 bucket name
+            Delete: Dictionary with deletion specification containing:
+                - Objects: List of dicts, each with 'Key' (required) and
+                  optional 'VersionId'
+                - Quiet: Optional bool. When True, only errors are returned
+                  in the response (default: False)
+            **kwargs: Additional arguments (currently unused)
+
+        Returns:
+            dict with deletion results containing:
+                - Deleted: List of successfully deleted objects
+                - Errors: List of objects that failed to delete
+                - ResponseMetadata: Response metadata with HTTPStatusCode
+                  and HTTPHeaders
+
+        Raises:
+            PresignError: If required parameters are missing or the request fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/delete_objects.html
+
+        Example:
+            >>> response = await client.delete_objects(
+            ...     Bucket="mybucket",
+            ...     Delete={
+            ...         "Objects": [
+            ...             {"Key": "file1.txt"},
+            ...             {"Key": "file2.txt"},
+            ...         ],
+            ...         "Quiet": False,
+            ...     },
+            ... )
+            >>> print(response["Deleted"])
+            [{'Key': 'file1.txt'}, {'Key': 'file2.txt'}]
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Delete or "Objects" not in Delete:
+            raise PresignError(
+                "Missing required parameter 'Objects' in Delete"
+            )
+
+        objects = Delete["Objects"]
+        if not objects:
+            raise PresignError("Delete.Objects must not be empty")
+
+        quiet = Delete.get("Quiet", False)
+
+        # Build XML body
+        body = self._build_delete_xml(objects, quiet)
+
+        # Compute Content-MD5 (required by S3 for multi-object delete)
+        content_md5 = b64encode(hashlib.md5(body).digest()).decode()  # noqa: S324
+
+        # Build the request
+        base_url, path, headers = self._build_request_url(Bucket)
+        headers["Content-Type"] = "application/xml"
+        headers["Content-MD5"] = content_md5
+
+        # Sign the request with the query string included
+        signed_headers = self._presigner.sign_request_headers(
+            method="POST",
+            path=path,
+            headers=headers,
+            body=body,
+            query_string="delete=",
+        )
+
+        # Build the full URL with ?delete query parameter
+        url = f"{base_url}{path}?delete"
+
+        # Execute the request
+        response = await self._execute_request("POST", url, signed_headers, body)
+
+        # Handle error responses
+        if response.status_code == 404:
+            raise NoSuchBucketError(
+                f"Bucket '{Bucket}' does not exist or is not accessible"
+            )
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(
+                f"Bad request for delete_objects on bucket '{Bucket}': {response.text}"
+            )
+        elif response.status_code != 200:
+            raise PresignError(
+                f"POST request failed with status {response.status_code}: {response.text}"
+            )
+
+        return self._parse_delete_response(response)
+
+    @staticmethod
+    def _build_delete_xml(objects: list[dict[str, str]], quiet: bool) -> bytes:
+        """Build the XML body for a multi-object delete request.
+
+        Args:
+            objects: List of dicts with 'Key' and optional 'VersionId'
+            quiet: When True, only errors are returned
+
+        Returns:
+            Encoded XML body bytes
+
+        """
+        parts = ["<Delete>"]
+        if quiet:
+            parts.append("<Quiet>true</Quiet>")
+        for obj in objects:
+            parts.append("<Object>")
+            parts.append(f"<Key>{obj['Key']}</Key>")
+            if "VersionId" in obj:
+                parts.append(f"<VersionId>{obj['VersionId']}</VersionId>")
+            parts.append("</Object>")
+        parts.append("</Delete>")
+        return "".join(parts).encode("utf-8")
+
+    @staticmethod
+    def _parse_delete_response(response) -> dict[str, Any]:
+        """Parse the XML response from a multi-object delete request.
+
+        Args:
+            response: HTTP response object
+
+        Returns:
+            dict with Deleted, Errors, and ResponseMetadata
+
+        """
+        deleted: list[dict[str, Any]] = []
+        errors: list[dict[str, Any]] = []
+
+        root = ET.fromstring(response.text)  # noqa: S314
+        # Handle namespace in the response XML
+        ns = ""
+        if root.tag.startswith("{"):
+            ns = root.tag.split("}")[0] + "}"
+
+        for elem in root.findall(f"{ns}Deleted"):
+            item: dict[str, Any] = {}
+            key = elem.find(f"{ns}Key")
+            if key is not None and key.text:
+                item["Key"] = key.text
+            version_id = elem.find(f"{ns}VersionId")
+            if version_id is not None and version_id.text:
+                item["VersionId"] = version_id.text
+            delete_marker = elem.find(f"{ns}DeleteMarker")
+            if delete_marker is not None and delete_marker.text:
+                item["DeleteMarker"] = delete_marker.text.lower() == "true"
+            delete_marker_vid = elem.find(f"{ns}DeleteMarkerVersionId")
+            if delete_marker_vid is not None and delete_marker_vid.text:
+                item["DeleteMarkerVersionId"] = delete_marker_vid.text
+            deleted.append(item)
+
+        for elem in root.findall(f"{ns}Error"):
+            item = {}
+            key = elem.find(f"{ns}Key")
+            if key is not None and key.text:
+                item["Key"] = key.text
+            version_id = elem.find(f"{ns}VersionId")
+            if version_id is not None and version_id.text:
+                item["VersionId"] = version_id.text
+            code = elem.find(f"{ns}Code")
+            if code is not None and code.text:
+                item["Code"] = code.text
+            message = elem.find(f"{ns}Message")
+            if message is not None and message.text:
+                item["Message"] = message.text
+            errors.append(item)
+
+        return {
+            "Deleted": deleted,
+            "Errors": errors,
             "ResponseMetadata": {
                 "HTTPStatusCode": response.status_code,
                 "HTTPHeaders": dict(response.headers),

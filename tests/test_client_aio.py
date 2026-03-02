@@ -191,3 +191,83 @@ async def test_generate_presigned_url_aio(s3_clients_aio, caplog):
             response.raise_for_status()
             for chunk in response.iter_bytes():
                 fh.write(chunk)
+
+
+@pytest.mark.asyncio
+async def test_delete_objects_aio(s3_clients_aio):
+    """Delete multiple objects using async delete_objects and verify they are removed."""
+    boto_client, async_light_client = s3_clients_aio
+
+    # Create test objects
+    keys = ["delete_test_1.txt", "delete_test_2.txt", "delete_test_3.txt"]
+    for key in keys:
+        await boto_client.put_object(Body=b"test content", Bucket=BUCKET_NAME, Key=key)
+
+    # Verify objects exist
+    for key in keys:
+        await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+    # Delete using our async client
+    response = await async_light_client.delete_objects(
+        Bucket=BUCKET_NAME,
+        Delete={"Objects": [{"Key": k} for k in keys]},
+    )
+
+    # Verify response structure
+    assert "Deleted" in response
+    assert "Errors" in response
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    # Verify all objects were reported as deleted
+    deleted_keys = {d["Key"] for d in response["Deleted"]}
+    assert deleted_keys == set(keys)
+    assert response["Errors"] == []
+
+    # Verify objects are actually gone
+    for key in keys:
+        with pytest.raises(ClientError):
+            await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+
+@pytest.mark.asyncio
+async def test_delete_objects_quiet_aio(s3_clients_aio):
+    """Delete objects with Quiet=True using async client."""
+    boto_client, async_light_client = s3_clients_aio
+
+    key = "delete_quiet_test.txt"
+    await boto_client.put_object(Body=b"test content", Bucket=BUCKET_NAME, Key=key)
+
+    response = await async_light_client.delete_objects(
+        Bucket=BUCKET_NAME,
+        Delete={"Objects": [{"Key": key}], "Quiet": True},
+    )
+
+    assert "Deleted" in response
+    assert "Errors" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert response["Errors"] == []
+
+    # Verify object is gone
+    with pytest.raises(ClientError):
+        await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+
+@pytest.mark.asyncio
+async def test_delete_objects_missing_params_aio(s3_clients_aio):
+    """Test that async delete_objects raises PresignError for missing parameters."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import PresignError
+
+    with pytest.raises(PresignError):
+        await async_light_client.delete_objects(
+            Bucket="", Delete={"Objects": [{"Key": "k"}]}
+        )
+
+    with pytest.raises(PresignError):
+        await async_light_client.delete_objects(Bucket=BUCKET_NAME, Delete={})
+
+    with pytest.raises(PresignError):
+        await async_light_client.delete_objects(
+            Bucket=BUCKET_NAME, Delete={"Objects": []}
+        )

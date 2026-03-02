@@ -176,6 +176,79 @@ def test_generate_presigned_url(s3_clients, caplog):
                 fh.write(chunk)
 
 
+def test_delete_objects(s3_clients):
+    """Delete multiple objects using delete_objects and verify they are removed."""
+    boto_client, light_client = s3_clients
+
+    # Create test objects
+    keys = ["delete_test_1.txt", "delete_test_2.txt", "delete_test_3.txt"]
+    for key in keys:
+        boto_client.put_object(Body=b"test content", Bucket=BUCKET_NAME, Key=key)
+
+    # Verify objects exist
+    for key in keys:
+        boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+    # Delete using our client
+    response = light_client.delete_objects(
+        Bucket=BUCKET_NAME,
+        Delete={"Objects": [{"Key": k} for k in keys]},
+    )
+
+    # Verify response structure
+    assert "Deleted" in response
+    assert "Errors" in response
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    # Verify all objects were reported as deleted
+    deleted_keys = {d["Key"] for d in response["Deleted"]}
+    assert deleted_keys == set(keys)
+    assert response["Errors"] == []
+
+    # Verify objects are actually gone
+    for key in keys:
+        with pytest.raises(botocore.exceptions.ClientError):
+            boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+
+def test_delete_objects_quiet(s3_clients):
+    """Delete objects with Quiet=True and verify empty Deleted list."""
+    boto_client, light_client = s3_clients
+
+    key = "delete_quiet_test.txt"
+    boto_client.put_object(Body=b"test content", Bucket=BUCKET_NAME, Key=key)
+
+    response = light_client.delete_objects(
+        Bucket=BUCKET_NAME,
+        Delete={"Objects": [{"Key": key}], "Quiet": True},
+    )
+
+    assert "Deleted" in response
+    assert "Errors" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert response["Errors"] == []
+
+    # Verify object is gone
+    with pytest.raises(botocore.exceptions.ClientError):
+        boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+
+def test_delete_objects_missing_params(s3_clients):
+    """Test that delete_objects raises PresignError for missing parameters."""
+    _boto_client, light_client = s3_clients
+    from signurlarity.exceptions import PresignError
+
+    with pytest.raises(PresignError):
+        light_client.delete_objects(Bucket="", Delete={"Objects": [{"Key": "k"}]})
+
+    with pytest.raises(PresignError):
+        light_client.delete_objects(Bucket=BUCKET_NAME, Delete={})
+
+    with pytest.raises(PresignError):
+        light_client.delete_objects(Bucket=BUCKET_NAME, Delete={"Objects": []})
+
+
 # @pytest.fixture()
 # def fix_1():
 #     print("entering fix 1")

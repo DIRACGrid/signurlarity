@@ -286,6 +286,7 @@ class S3Presigner:
         headers: dict[str, str],
         timestamp: Optional[datetime] = None,
         body: bytes = b"",
+        query_string: str = "",
     ) -> dict[str, str]:
         """Generate AWS Signature V4 Authorization header for an HTTP request.
 
@@ -299,6 +300,7 @@ class S3Presigner:
             headers: Request headers dict (must include 'host')
             timestamp: Optional fixed timestamp for testing. Default: current UTC time
             body: Request body bytes. Default: empty bytes
+            query_string: Query string without leading '?'. Default: empty string
 
         Returns:
             Updated headers dict including:
@@ -355,7 +357,7 @@ class S3Presigner:
         # Canonical request components
         canonical_method = method.upper()
         canonical_uri = path
-        canonical_querystring = ""  # No query string for HEAD requests
+        canonical_querystring = query_string
 
         # Build canonical headers
         canonical_headers_list = []
