@@ -128,7 +128,9 @@ jobs:
           pixi run -e py314 display-benchmark-comparison --test-results-dir ${{ runner.temp }}/perf_tests/ --md-output ${{ runner.temp }}/perf_tests/pretty.md
       - name: Save PR number
         if: ${{ github.event_name == 'pull_request' }}
-        run: echo "${{ github.event.pull_request.number }}" > ${{ runner.temp }}/perf_tests/pr_number.txt
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: echo "$PR_NUMBER" > ${{ runner.temp }}/perf_tests/pr_number.txt
       - name: Upload perf comparison data
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v6

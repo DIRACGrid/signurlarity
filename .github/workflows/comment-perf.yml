@@ -43,17 +43,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          WORKFLOW_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           # Method 1: PR number saved in artifact by the upstream workflow
           PR_NUMBER=""
           if [ -f "${{ runner.temp }}/perf_tests/pr_number.txt" ]; then
-            PR_NUMBER=$(cat "${{ runner.temp }}/perf_tests/pr_number.txt")
-            echo "Got PR number from artifact file: ${PR_NUMBER}"
+            ARTIFACT_PR_NUMBER=$(cat "${{ runner.temp }}/perf_tests/pr_number.txt")
+            if [[ "$ARTIFACT_PR_NUMBER" =~ ^[0-9]+$ ]]; then
+              PR_NUMBER="$ARTIFACT_PR_NUMBER"
+              echo "Got PR number from artifact file: ${PR_NUMBER}"
+            else
+              echo "Artifact pr_number.txt contains non-integer value, ignoring"
+            fi
           fi
 
           # Method 2: PR number from the workflow_run event payload
           if [ -z "$PR_NUMBER" ]; then
-            PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
+            PR_NUMBER="$WORKFLOW_PR_NUMBER"
             if [ -n "$PR_NUMBER" ]; then
               echo "Got PR number from event payload: ${PR_NUMBER}"
             fi
@@ -61,8 +68,8 @@ jobs:
 
           # Method 3: Query GitHub API using the head SHA
           if [ -z "$PR_NUMBER" ]; then
-            echo "Querying GitHub API for PR associated with head SHA ${{ github.event.workflow_run.head_sha }}"
-            PR_NUMBER=$(gh api "repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_sha }}/pulls?state=open" --jq '.[0].number // empty' 2>/dev/null || true)
+            echo "Querying GitHub API for PR associated with head SHA ${HEAD_SHA}"
+            PR_NUMBER=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls?state=open" --jq '.[0].number // empty' 2>/dev/null || true)
             if [ -n "$PR_NUMBER" ]; then
               echo "Got PR number from GitHub API: ${PR_NUMBER}"
             fi
