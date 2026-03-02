@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from base64 import b64encode
 from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
+from xml.sax.saxutils import escape as xml_escape
 
 import httpx
 
@@ -836,9 +837,9 @@ class AsyncClient:
             parts.append("<Quiet>true</Quiet>")
         for obj in objects:
             parts.append("<Object>")
-            parts.append(f"<Key>{obj['Key']}</Key>")
+            parts.append(f"<Key>{xml_escape(obj['Key'])}</Key>")
             if "VersionId" in obj:
-                parts.append(f"<VersionId>{obj['VersionId']}</VersionId>")
+                parts.append(f"<VersionId>{xml_escape(obj['VersionId'])}</VersionId>")
             parts.append("</Object>")
         parts.append("</Delete>")
         return "".join(parts).encode("utf-8")
