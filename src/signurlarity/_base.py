@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
+from xml.etree import ElementTree
 
 import httpx
 
@@ -402,3 +405,115 @@ class _BaseClient:
                 "HTTPHeaders": dict(response.headers),
             },
         }
+
+    def _prepare_delete_objects(
+        self, Bucket: str, Delete: dict[str, Any], **kwargs
+    ) -> tuple[str, dict[str, str], bytes]:
+        """Validate and build a signed POST multi-object delete request.
+
+        Returns:
+            Tuple of (url, signed_headers, body)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Delete or "Objects" not in Delete:
+            raise PresignError("Missing required parameter 'Delete' with 'Objects' list")
+        if not Delete["Objects"]:
+            raise PresignError("'Delete.Objects' must contain at least one object")
+
+        base_url, path, headers = self._build_request_url(Bucket)
+
+        # Build XML body
+        quiet = Delete.get("Quiet", False)
+        xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>', "<Delete>"]
+        if quiet:
+            xml_parts.append("<Quiet>true</Quiet>")
+        for obj in Delete["Objects"]:
+            xml_parts.append("<Object>")
+            xml_parts.append(f"<Key>{obj['Key']}</Key>")
+            if "VersionId" in obj:
+                xml_parts.append(f"<VersionId>{obj['VersionId']}</VersionId>")
+            xml_parts.append("</Object>")
+        xml_parts.append("</Delete>")
+        body = "".join(xml_parts).encode("utf-8")
+
+        # Content-MD5 is required for delete_objects
+        content_md5 = hashlib.md5(body).digest()  # noqa: S324
+        headers["Content-MD5"] = base64.b64encode(content_md5).decode()
+        headers["Content-Type"] = "application/xml"
+
+        query_string = "delete="
+        signed_headers = self._presigner.sign_request_headers(
+            method="POST",
+            path=path,
+            headers=headers,
+            body=body,
+            query_string=query_string,
+        )
+
+        url = f"{base_url}{path}?{query_string}"
+
+        return url, signed_headers, body
+
+    def _parse_delete_objects_response(
+        self, response: httpx.Response, Bucket: str
+    ) -> dict[str, Any]:
+        """Parse multi-object delete response, raising on errors."""
+        if response.status_code == 404:
+            raise NoSuchBucketError(
+                f"Bucket '{Bucket}' does not exist or is not accessible"
+            )
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(
+                f"Bad request to delete objects in bucket '{Bucket}': {response.text}"
+            )
+        elif response.status_code != 200:
+            raise PresignError(
+                f"POST delete request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        # Parse XML response
+        if response.text:
+            root = ElementTree.fromstring(response.text)  # noqa: S314
+            # Handle namespace in the XML response
+            ns = ""
+            if root.tag.startswith("{"):
+                ns = root.tag.split("}")[0] + "}"
+
+            deleted = []
+            for d in root.findall(f"{ns}Deleted"):
+                entry: dict[str, str] = {"Key": d.findtext(f"{ns}Key", "")}
+                version_id = d.findtext(f"{ns}VersionId")
+                if version_id:
+                    entry["VersionId"] = version_id
+                deleted.append(entry)
+            if deleted:
+                result["Deleted"] = deleted
+
+            errors = []
+            for e in root.findall(f"{ns}Error"):
+                entry_err: dict[str, str] = {
+                    "Key": e.findtext(f"{ns}Key", ""),
+                    "Code": e.findtext(f"{ns}Code", ""),
+                    "Message": e.findtext(f"{ns}Message", ""),
+                }
+                version_id = e.findtext(f"{ns}VersionId")
+                if version_id:
+                    entry_err["VersionId"] = version_id
+                errors.append(entry_err)
+            if errors:
+                result["Errors"] = errors
+
+        return result
