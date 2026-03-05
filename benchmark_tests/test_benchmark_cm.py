@@ -391,3 +391,93 @@ def test_create_bucket_perf_sync_cm(rustfs_server, test_results_dir):
         result_file.write_text(json.dumps(results, indent=2))
 
         print("=" * 60)
+
+
+def test_delete_objects_perf_sync_cm(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity for delete_objects.
+
+    This benchmark compares boto3's delete_objects with the signurlarity
+    implementation that uses httpx with AWS Signature V4.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_delete_objects_perf_sync_cm")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    bucket = "perf-delete-objects"
+    num_keys = 10
+
+    boto_client = boto3.client("s3", **rustfs_server)
+    with Client(**rustfs_server) as light_client:
+        # Create the bucket for testing
+        boto_client.create_bucket(Bucket=bucket)
+
+        iterations = 10
+
+        def _populate(prefix: str):
+            keys = [f"{prefix}-{i}.txt" for i in range(num_keys)]
+            for k in keys:
+                boto_client.put_object(Bucket=bucket, Key=k, Body=b"data")
+            return keys
+
+        # Warm-up
+        for i in range(5):
+            keys = _populate(f"warmup-boto-{i}")
+            boto_client.delete_objects(
+                Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]}
+            )
+
+        for i in range(5):
+            keys = _populate(f"warmup-light-{i}")
+            light_client.delete_objects(
+                Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]}
+            )
+
+        def run_boto(n: int):
+            for i in range(n):
+                keys = _populate(f"bench-boto-{i}")
+                boto_client.delete_objects(
+                    Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]}
+                )
+
+        def run_custom(n: int):
+            for i in range(n):
+                keys = _populate(f"bench-light-{i}")
+                light_client.delete_objects(
+                    Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]}
+                )
+
+        t_boto = _timeit(run_boto, iterations)
+        t_custom = _timeit(run_custom, iterations)
+
+        results = {
+            "python_version": f"{py_vers.major}.{py_vers.minor}",
+            "tested_method": "delete_objects_sync_cm",
+            "iterations": iterations,
+            "boto_total": t_boto,
+            "signurlarity_total": t_custom,
+            "boto_ops": iterations / t_boto,
+            "signurlarity_ops": iterations / t_custom,
+            "speedup": t_boto / t_custom,
+        }
+
+        print("\n" + "=" * 60)
+        print("DELETE OBJECTS BENCHMARK")
+        print("=" * 60)
+        print(
+            f"boto3 delete_objects: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+        )
+        print(
+            f"signurlarity delete_objects: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+        )
+        if t_custom > 0:
+            speedup = t_boto / t_custom
+            print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+            if speedup > 1:
+                print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
+            else:
+                print(f"boto3 is {1 / speedup:.2f}x faster")
+
+        result_file.write_text(json.dumps(results, indent=2))
+
+        print("=" * 60)

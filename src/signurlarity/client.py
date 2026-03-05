@@ -328,7 +328,9 @@ class Client(_BaseClient):
         response = self._execute_request("PUT", url, signed_headers, body)
         return self._parse_create_bucket_response(response, Bucket)
 
-    def delete_objects(self, Bucket: str, Delete: dict[str, Any], **kwargs) -> dict[str, Any]:
+    def delete_objects(
+        self, Bucket: str, Delete: dict[str, Any], **kwargs
+    ) -> dict[str, Any]:
         """Delete multiple objects from an S3 bucket in a single request.
 
         Performs a POST request with a multi-object delete XML payload.
@@ -366,6 +368,8 @@ class Client(_BaseClient):
             ... )
 
         """
-        url, signed_headers, body = self._prepare_delete_objects(Bucket, Delete, **kwargs)
+        url, signed_headers, body = self._prepare_delete_objects(
+            Bucket, Delete, **kwargs
+        )
         response = self._execute_request("POST", url, signed_headers, body)
         return self._parse_delete_objects_response(response, Bucket)

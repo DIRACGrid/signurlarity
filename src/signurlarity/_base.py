@@ -419,7 +419,9 @@ class _BaseClient:
         if not Bucket:
             raise PresignError("Missing required parameter 'Bucket'")
         if not Delete or "Objects" not in Delete:
-            raise PresignError("Missing required parameter 'Delete' with 'Objects' list")
+            raise PresignError(
+                "Missing required parameter 'Delete' with 'Objects' list"
+            )
         if not Delete["Objects"]:
             raise PresignError("'Delete.Objects' must contain at least one object")
 
@@ -434,7 +436,9 @@ class _BaseClient:
             xml_parts.append("<Object>")
             xml_parts.append(f"<Key>{xml_escape(obj['Key'])}</Key>")
             if "VersionId" in obj:
-                xml_parts.append(f"<VersionId>{xml_escape(obj['VersionId'])}</VersionId>")
+                xml_parts.append(
+                    f"<VersionId>{xml_escape(obj['VersionId'])}</VersionId>"
+                )
             xml_parts.append("</Object>")
         xml_parts.append("</Delete>")
         body = "".join(xml_parts).encode("utf-8")
