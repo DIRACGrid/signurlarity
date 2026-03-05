@@ -7,6 +7,7 @@ import hashlib
 from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
 from xml.etree import ElementTree
+from xml.sax.saxutils import escape as xml_escape
 
 import httpx
 
@@ -431,9 +432,9 @@ class _BaseClient:
             xml_parts.append("<Quiet>true</Quiet>")
         for obj in Delete["Objects"]:
             xml_parts.append("<Object>")
-            xml_parts.append(f"<Key>{obj['Key']}</Key>")
+            xml_parts.append(f"<Key>{xml_escape(obj['Key'])}</Key>")
             if "VersionId" in obj:
-                xml_parts.append(f"<VersionId>{obj['VersionId']}</VersionId>")
+                xml_parts.append(f"<VersionId>{xml_escape(obj['VersionId'])}</VersionId>")
             xml_parts.append("</Object>")
         xml_parts.append("</Delete>")
         body = "".join(xml_parts).encode("utf-8")
