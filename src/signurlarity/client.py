@@ -118,6 +118,8 @@ class Client(_BaseClient):
                 return self._http_client.get(url, headers=headers)
             elif method == "DELETE":
                 return self._http_client.delete(url, headers=headers)
+            elif method == "POST":
+                return self._http_client.post(url, headers=headers, content=body)
             else:
                 raise PresignError(f"Unsupported HTTP method: {method}")
         except httpx.HTTPError as e:
@@ -325,3 +327,49 @@ class Client(_BaseClient):
         url, signed_headers, body = self._prepare_create_bucket(Bucket, **kwargs)
         response = self._execute_request("PUT", url, signed_headers, body)
         return self._parse_create_bucket_response(response, Bucket)
+
+    def delete_objects(
+        self, Bucket: str, Delete: dict[str, Any], **kwargs
+    ) -> dict[str, Any]:
+        """Delete multiple objects from an S3 bucket in a single request.
+
+        Performs a POST request with a multi-object delete XML payload.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            Delete: Delete specification containing:
+                - Objects: List of dicts, each with 'Key' (required) and optional 'VersionId'
+                - Quiet: If True, only report errors (default: False)
+            **kwargs: Additional arguments
+
+        Returns:
+            dict with response metadata containing:
+                - Deleted: List of successfully deleted objects (when Quiet=False)
+                - Errors: List of objects that failed to delete (if any)
+                - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
+
+        Raises:
+            NoSuchBucketError: If bucket does not exist or is not accessible
+            PresignError: If request signing or execution fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/delete_objects.html
+
+        Example:
+            >>> response = client.delete_objects(
+            ...     Bucket="mybucket",
+            ...     Delete={
+            ...         "Objects": [
+            ...             {"Key": "file1.txt"},
+            ...             {"Key": "file2.txt"},
+            ...         ],
+            ...         "Quiet": False,
+            ...     },
+            ... )
+
+        """
+        url, signed_headers, body = self._prepare_delete_objects(
+            Bucket, Delete, **kwargs
+        )
+        response = self._execute_request("POST", url, signed_headers, body)
+        return self._parse_delete_objects_response(response, Bucket)
