@@ -360,6 +360,59 @@ def test_copy_object_missing_copy_source(s3_clients):
         light_client.copy_object(Bucket=BUCKET_NAME, Key="dst.txt", CopySource="")
 
 
+def test_upload_file(s3_clients, tmp_path):
+    """Test that upload_file uploads a local file to S3."""
+    boto_client, light_client = s3_clients
+
+    content = b"file content to upload"
+    local_file = tmp_path / "upload_test.txt"
+    local_file.write_bytes(content)
+
+    key = "upload-file-test.txt"
+    result = light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+    )
+
+    assert result is None
+
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(content)
+
+
+def test_upload_file_with_extra_args(s3_clients, tmp_path):
+    """Test that upload_file forwards ExtraArgs to put_object."""
+    boto_client, light_client = s3_clients
+
+    content = b"pdf content"
+    local_file = tmp_path / "report.pdf"
+    local_file.write_bytes(content)
+
+    key = "upload-file-extra-args.pdf"
+    light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+        ExtraArgs={"ContentType": "application/pdf"},
+    )
+
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentType"] == "application/pdf"
+    assert head["ContentLength"] == len(content)
+
+
+def test_upload_file_missing_file(s3_clients):
+    """Test that upload_file raises OSError for a non-existent file."""
+    _boto_client, light_client = s3_clients
+    with pytest.raises(OSError):
+        light_client.upload_file(
+            Filename="/nonexistent/path/file.txt",
+            Bucket=BUCKET_NAME,
+            Key="key.txt",
+        )
+
+
 def test_delete_objects(s3_clients):
     """Test that delete_objects deletes multiple objects."""
     boto_client, light_client = s3_clients

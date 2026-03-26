@@ -395,6 +395,62 @@ async def test_copy_object_missing_copy_source_aio(s3_clients_aio):
 
 
 @pytest.mark.asyncio
+async def test_upload_file_aio(s3_clients_aio, tmp_path):
+    """Test that upload_file uploads a local file to S3 (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    content = b"async file content to upload"
+    local_file = tmp_path / "upload_test_aio.txt"
+    local_file.write_bytes(content)
+
+    key = "upload-file-test-aio.txt"
+    result = await async_light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+    )
+
+    assert result is None
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(content)
+
+
+@pytest.mark.asyncio
+async def test_upload_file_with_extra_args_aio(s3_clients_aio, tmp_path):
+    """Test that upload_file forwards ExtraArgs to put_object (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    content = b"async pdf content"
+    local_file = tmp_path / "report_aio.pdf"
+    local_file.write_bytes(content)
+
+    key = "upload-file-extra-args-aio.pdf"
+    await async_light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+        ExtraArgs={"ContentType": "application/pdf"},
+    )
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentType"] == "application/pdf"
+    assert head["ContentLength"] == len(content)
+
+
+@pytest.mark.asyncio
+async def test_upload_file_missing_file_aio(s3_clients_aio):
+    """Test that upload_file raises OSError for a non-existent file (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(OSError):
+        await async_light_client.upload_file(
+            Filename="/nonexistent/path/file.txt",
+            Bucket=BUCKET_NAME,
+            Key="key.txt",
+        )
+
+
+@pytest.mark.asyncio
 async def test_delete_objects_aio(s3_clients_aio):
     """Test that delete_objects deletes multiple objects (async)."""
     boto_client, async_light_client = s3_clients_aio

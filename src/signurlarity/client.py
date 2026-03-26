@@ -328,6 +328,50 @@ class Client(_BaseClient):
         response = self._execute_request("PUT", url, signed_headers, body)
         return self._parse_create_bucket_response(response, Bucket)
 
+    def upload_file(
+        self,
+        Filename: str,
+        Bucket: str,
+        Key: str,
+        ExtraArgs: dict[str, Any] | None = None,
+    ) -> None:
+        """Upload a local file to an S3 bucket.
+
+        Reads the file at ``Filename`` and uploads it via :meth:`put_object`.
+        This is a single-part upload; for very large files consider using
+        multipart upload directly.
+
+        Args:
+            Filename: Local file path to upload (required)
+            Bucket: S3 bucket name (required)
+            Key: Destination object key in the bucket (required)
+            ExtraArgs: Optional dict of additional keyword arguments forwarded
+                to :meth:`put_object` (e.g. ``ContentType``, ``Metadata``).
+
+        Returns:
+            None
+
+        Raises:
+            PresignError: If required parameters are missing or the upload fails
+            OSError: If the file cannot be read
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/upload_file.html
+
+        Example:
+            >>> client.upload_file(
+            ...     Filename="/tmp/report.pdf",
+            ...     Bucket="mybucket",
+            ...     Key="reports/report.pdf",
+            ...     ExtraArgs={"ContentType": "application/pdf"},
+            ... )
+
+        """
+        with open(Filename, "rb") as fh:  # noqa: PTH123
+            body = fh.read()
+        kwargs = ExtraArgs or {}
+        self.put_object(Bucket=Bucket, Key=Key, Body=body, **kwargs)
+
     def copy_object(
         self,
         Bucket: str,
