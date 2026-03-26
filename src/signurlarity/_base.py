@@ -407,6 +407,98 @@ class _BaseClient:
             },
         }
 
+    def _prepare_copy_object(
+        self, Bucket: str, Key: str, CopySource: str | dict[str, str], **kwargs
+    ) -> tuple[str, dict[str, str]]:
+        """Validate and build a signed PUT copy-object request.
+
+        Returns:
+            Tuple of (url, signed_headers)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Key:
+            raise PresignError("Missing required parameter 'Key'")
+        if not CopySource:
+            raise PresignError("Missing required parameter 'CopySource'")
+
+        # Normalise CopySource to a "bucket/key" string
+        if isinstance(CopySource, dict):
+            src_bucket = CopySource.get("Bucket", "")
+            src_key = CopySource.get("Key", "")
+            if not src_bucket or not src_key:
+                raise PresignError(
+                    "CopySource dict must contain non-empty 'Bucket' and 'Key'"
+                )
+            copy_source_str = f"{src_bucket}/{src_key}"
+            version_id = CopySource.get("VersionId")
+            if version_id:
+                copy_source_str = f"{copy_source_str}?versionId={version_id}"
+        else:
+            copy_source_str = CopySource
+
+        base_url, path, headers = self._build_request_url(Bucket, Key)
+        headers["x-amz-copy-source"] = copy_source_str
+
+        if "MetadataDirective" in kwargs:
+            headers["x-amz-metadata-directive"] = kwargs["MetadataDirective"]
+        if "ContentType" in kwargs:
+            headers["Content-Type"] = kwargs["ContentType"]
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="PUT",
+            path=path,
+            headers=headers,
+        )
+
+        url = base_url + path
+
+        return url, signed_headers
+
+    def _parse_copy_object_response(
+        self, response: httpx.Response, Bucket: str, Key: str
+    ) -> dict[str, Any]:
+        """Parse copy-object response, raising on errors."""
+        if response.status_code == 404:
+            raise PresignError(
+                f"Source or destination not found for copy to '{Bucket}/{Key}'"
+            )
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied for copy to '{Bucket}/{Key}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(f"Bad request for copy_object '{Key}': {response.text}")
+        elif response.status_code != 200:
+            raise PresignError(
+                f"PUT copy request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        if response.text:
+            root = ElementTree.fromstring(response.text)  # noqa: S314
+            ns = ""
+            if root.tag.startswith("{"):
+                ns = root.tag.split("}")[0] + "}"
+            copy_result: dict[str, str] = {}
+            etag = root.findtext(f"{ns}ETag")
+            if etag:
+                copy_result["ETag"] = etag
+            last_modified = root.findtext(f"{ns}LastModified")
+            if last_modified:
+                copy_result["LastModified"] = last_modified
+            if copy_result:
+                result["CopyObjectResult"] = copy_result
+
+        return result
+
     def _prepare_list_objects(
         self, Bucket: str, **kwargs
     ) -> tuple[str, dict[str, str]]:

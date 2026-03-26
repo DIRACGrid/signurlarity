@@ -298,6 +298,68 @@ def test_list_objects_missing_bucket(s3_clients):
         light_client.list_objects(Bucket="")
 
 
+def test_copy_object(s3_clients):
+    """Test that copy_object copies an object using a string CopySource."""
+    boto_client, light_client = s3_clients
+
+    src_key = "copy-src.txt"
+    dst_key = "copy-dst.txt"
+    boto_client.put_object(Body=b"copy me", Bucket=BUCKET_NAME, Key=src_key)
+
+    response = light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource=f"{BUCKET_NAME}/{src_key}",
+    )
+
+    assert "CopyObjectResult" in response
+    assert "ETag" in response["CopyObjectResult"]
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    # Verify destination exists
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+    assert head["ContentLength"] == len(b"copy me")
+
+
+def test_copy_object_dict_source(s3_clients):
+    """Test that copy_object works with a dict CopySource."""
+    boto_client, light_client = s3_clients
+
+    src_key = "copy-src-dict.txt"
+    dst_key = "copy-dst-dict.txt"
+    boto_client.put_object(Body=b"dict source", Bucket=BUCKET_NAME, Key=src_key)
+
+    response = light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource={"Bucket": BUCKET_NAME, "Key": src_key},
+    )
+
+    assert "CopyObjectResult" in response
+    boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+
+
+def test_copy_object_missing_bucket(s3_clients):
+    """Test that copy_object raises PresignError when Bucket is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.copy_object(
+            Bucket="", Key="dst.txt", CopySource=f"{BUCKET_NAME}/src.txt"
+        )
+
+
+def test_copy_object_missing_copy_source(s3_clients):
+    """Test that copy_object raises PresignError when CopySource is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.copy_object(Bucket=BUCKET_NAME, Key="dst.txt", CopySource="")
+
+
 def test_delete_objects(s3_clients):
     """Test that delete_objects deletes multiple objects."""
     boto_client, light_client = s3_clients

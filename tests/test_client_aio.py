@@ -326,6 +326,75 @@ async def test_list_objects_missing_bucket_aio(s3_clients_aio):
 
 
 @pytest.mark.asyncio
+async def test_copy_object_aio(s3_clients_aio):
+    """Test that copy_object copies an object using a string CopySource (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    src_key = "copy-src-aio.txt"
+    dst_key = "copy-dst-aio.txt"
+    await boto_client.put_object(Body=b"copy me async", Bucket=BUCKET_NAME, Key=src_key)
+
+    response = await async_light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource=f"{BUCKET_NAME}/{src_key}",
+    )
+
+    assert "CopyObjectResult" in response
+    assert "ETag" in response["CopyObjectResult"]
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+    assert head["ContentLength"] == len(b"copy me async")
+
+
+@pytest.mark.asyncio
+async def test_copy_object_dict_source_aio(s3_clients_aio):
+    """Test that copy_object works with a dict CopySource (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    src_key = "copy-src-dict-aio.txt"
+    dst_key = "copy-dst-dict-aio.txt"
+    await boto_client.put_object(
+        Body=b"dict source async", Bucket=BUCKET_NAME, Key=src_key
+    )
+
+    response = await async_light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource={"Bucket": BUCKET_NAME, "Key": src_key},
+    )
+
+    assert "CopyObjectResult" in response
+    await boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+
+
+@pytest.mark.asyncio
+async def test_copy_object_missing_bucket_aio(s3_clients_aio):
+    """Test that copy_object raises PresignError when Bucket is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.copy_object(
+            Bucket="", Key="dst.txt", CopySource=f"{BUCKET_NAME}/src.txt"
+        )
+
+
+@pytest.mark.asyncio
+async def test_copy_object_missing_copy_source_aio(s3_clients_aio):
+    """Test that copy_object raises PresignError when CopySource is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.copy_object(
+            Bucket=BUCKET_NAME, Key="dst.txt", CopySource=""
+        )
+
+
+@pytest.mark.asyncio
 async def test_delete_objects_aio(s3_clients_aio):
     """Test that delete_objects deletes multiple objects (async)."""
     boto_client, async_light_client = s3_clients_aio

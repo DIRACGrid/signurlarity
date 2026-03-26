@@ -328,6 +328,53 @@ class Client(_BaseClient):
         response = self._execute_request("PUT", url, signed_headers, body)
         return self._parse_create_bucket_response(response, Bucket)
 
+    def copy_object(
+        self,
+        Bucket: str,
+        Key: str,
+        CopySource: str | dict[str, str],
+        **kwargs,
+    ) -> dict[str, Any]:
+        """Copy an S3 object to a new location.
+
+        Performs a PUT request with the x-amz-copy-source header to copy
+        an object within or across buckets.
+
+        Args:
+            Bucket: Destination S3 bucket name (required)
+            Key: Destination object key (required)
+            CopySource: Source of the copy. Either a string ``"bucket/key"``
+                or a dict ``{"Bucket": "...", "Key": "...", "VersionId": "..."}``.
+            **kwargs: Additional arguments including:
+                - MetadataDirective: 'COPY' (default) or 'REPLACE'
+                - ContentType: Override content type (requires MetadataDirective='REPLACE')
+
+        Returns:
+            dict with copy result containing:
+                - CopyObjectResult: dict with ETag and LastModified of the new object
+                - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
+
+        Raises:
+            PresignError: If required parameters are missing or request fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/copy_object.html
+
+        Example:
+            >>> response = client.copy_object(
+            ...     Bucket="dest-bucket",
+            ...     Key="dest/key.txt",
+            ...     CopySource="src-bucket/src/key.txt",
+            ... )
+            >>> print(response["CopyObjectResult"]["ETag"])
+
+        """
+        url, signed_headers = self._prepare_copy_object(
+            Bucket, Key, CopySource, **kwargs
+        )
+        response = self._execute_request("PUT", url, signed_headers)
+        return self._parse_copy_object_response(response, Bucket, Key)
+
     def list_objects(self, Bucket: str, **kwargs) -> dict[str, Any]:
         """List objects in an S3 bucket (list-objects v1).
 
