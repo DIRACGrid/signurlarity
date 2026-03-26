@@ -236,6 +236,68 @@ def test_put_object_missing_key(s3_clients):
         light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
 
 
+def test_list_objects_empty(s3_clients):
+    """Test list_objects on a bucket with no matching prefix."""
+    _boto_client, light_client = s3_clients
+
+    response = light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="list-objects-nonexistent-prefix/"
+    )
+
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert response["Contents"] == []
+    assert response["IsTruncated"] is False
+
+
+def test_list_objects(s3_clients):
+    """Test list_objects returns uploaded objects."""
+    boto_client, light_client = s3_clients
+
+    keys = ["list-test/a.txt", "list-test/b.txt", "list-test/c.txt"]
+    for key in keys:
+        boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = light_client.list_objects(Bucket=BUCKET_NAME, Prefix="list-test/")
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    returned_keys = {obj["Key"] for obj in response["Contents"]}
+    assert returned_keys.issuperset(set(keys))
+    for obj in response["Contents"]:
+        assert "Key" in obj
+        assert "ETag" in obj
+        assert "Size" in obj
+        assert "LastModified" in obj
+
+
+def test_list_objects_with_delimiter(s3_clients):
+    """Test list_objects with delimiter groups common prefixes."""
+    boto_client, light_client = s3_clients
+
+    keys = ["delim-test/dir1/file.txt", "delim-test/dir2/file.txt"]
+    for key in keys:
+        boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="delim-test/", Delimiter="/"
+    )
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert "CommonPrefixes" in response
+    prefixes = {cp["Prefix"] for cp in response["CommonPrefixes"]}
+    assert "delim-test/dir1/" in prefixes
+    assert "delim-test/dir2/" in prefixes
+
+
+def test_list_objects_missing_bucket(s3_clients):
+    """Test that list_objects raises PresignError when Bucket is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.list_objects(Bucket="")
+
+
 def test_delete_objects(s3_clients):
     """Test that delete_objects deletes multiple objects."""
     boto_client, light_client = s3_clients

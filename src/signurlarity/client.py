@@ -328,6 +328,48 @@ class Client(_BaseClient):
         response = self._execute_request("PUT", url, signed_headers, body)
         return self._parse_create_bucket_response(response, Bucket)
 
+    def list_objects(self, Bucket: str, **kwargs) -> dict[str, Any]:
+        """List objects in an S3 bucket (list-objects v1).
+
+        Performs a GET request to list objects in a bucket.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            **kwargs: Additional arguments including:
+                - Delimiter: Character to group keys (e.g. '/')
+                - EncodingType: Encoding type for keys (e.g. 'url')
+                - Marker: Key to start listing from (pagination)
+                - MaxKeys: Maximum number of keys to return (default 1000)
+                - Prefix: Limit results to keys beginning with this prefix
+
+        Returns:
+            dict with listing results containing:
+                - Contents: List of object dicts (Key, ETag, Size, LastModified, StorageClass)
+                - CommonPrefixes: List of prefix dicts (when Delimiter is set)
+                - IsTruncated: True if there are more results
+                - NextMarker: Key to use as Marker for the next page (if IsTruncated)
+                - Name: Bucket name
+                - Prefix: Prefix used in the request
+                - MaxKeys: MaxKeys used in the request
+                - ResponseMetadata: Response metadata
+
+        Raises:
+            NoSuchBucketError: If bucket does not exist
+            PresignError: If request signing or execution fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/list_objects.html
+
+        Example:
+            >>> response = client.list_objects(Bucket="mybucket", Prefix="logs/")
+            >>> for obj in response["Contents"]:
+            ...     print(obj["Key"])
+
+        """
+        url, signed_headers = self._prepare_list_objects(Bucket, **kwargs)
+        response = self._execute_request("GET", url, signed_headers)
+        return self._parse_list_objects_response(response, Bucket)
+
     def put_object(self, Bucket: str, Key: str, **kwargs) -> dict[str, Any]:
         """Upload an object to an S3 bucket.
 

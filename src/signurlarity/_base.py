@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from typing import Any, Mapping, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape as xml_escape
 
@@ -406,6 +406,120 @@ class _BaseClient:
                 "HTTPHeaders": dict(response.headers),
             },
         }
+
+    def _prepare_list_objects(
+        self, Bucket: str, **kwargs
+    ) -> tuple[str, dict[str, str]]:
+        """Validate and build a signed GET list-objects request.
+
+        Returns:
+            Tuple of (url, signed_headers)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+
+        base_url, path, headers = self._build_request_url(Bucket)
+
+        query_params: dict[str, str] = {}
+        if "Delimiter" in kwargs:
+            query_params["delimiter"] = kwargs["Delimiter"]
+        if "EncodingType" in kwargs:
+            query_params["encoding-type"] = kwargs["EncodingType"]
+        if "Marker" in kwargs:
+            query_params["marker"] = kwargs["Marker"]
+        if "MaxKeys" in kwargs:
+            query_params["max-keys"] = str(kwargs["MaxKeys"])
+        if "Prefix" in kwargs:
+            query_params["prefix"] = kwargs["Prefix"]
+
+        query_string = urlencode(query_params) if query_params else ""
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="GET",
+            path=path,
+            headers=headers,
+            query_string=query_string,
+        )
+
+        url = base_url + path
+        if query_string:
+            url = f"{url}?{query_string}"
+
+        return url, signed_headers
+
+    def _parse_list_objects_response(
+        self, response: httpx.Response, Bucket: str
+    ) -> dict[str, Any]:
+        """Parse list-objects response, raising on errors."""
+        if response.status_code == 404:
+            raise NoSuchBucketError(
+                f"Bucket '{Bucket}' does not exist or is not accessible"
+            )
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(
+                f"Bad request for list_objects on bucket '{Bucket}': {response.text}"
+            )
+        elif response.status_code != 200:
+            raise PresignError(
+                f"GET request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        if response.text:
+            root = ElementTree.fromstring(response.text)  # noqa: S314
+            ns = ""
+            if root.tag.startswith("{"):
+                ns = root.tag.split("}")[0] + "}"
+
+            result["Name"] = root.findtext(f"{ns}Name", Bucket)
+            result["Prefix"] = root.findtext(f"{ns}Prefix", "")
+            result["Delimiter"] = root.findtext(f"{ns}Delimiter", "")
+            max_keys_text = root.findtext(f"{ns}MaxKeys", "1000")
+            result["MaxKeys"] = int(max_keys_text) if max_keys_text else 1000
+            result["IsTruncated"] = (
+                root.findtext(f"{ns}IsTruncated", "false").lower() == "true"
+            )
+            next_marker = root.findtext(f"{ns}NextMarker")
+            if next_marker:
+                result["NextMarker"] = next_marker
+
+            contents = []
+            for obj in root.findall(f"{ns}Contents"):
+                entry: dict[str, Any] = {
+                    "Key": obj.findtext(f"{ns}Key", ""),
+                    "ETag": obj.findtext(f"{ns}ETag", ""),
+                    "Size": int(obj.findtext(f"{ns}Size", "0") or "0"),
+                    "LastModified": obj.findtext(f"{ns}LastModified", ""),
+                    "StorageClass": obj.findtext(f"{ns}StorageClass", ""),
+                }
+                owner_elem = obj.find(f"{ns}Owner")
+                if owner_elem is not None:
+                    entry["Owner"] = {
+                        "DisplayName": owner_elem.findtext(f"{ns}DisplayName", ""),
+                        "ID": owner_elem.findtext(f"{ns}ID", ""),
+                    }
+                contents.append(entry)
+            result["Contents"] = contents
+
+            common_prefixes = []
+            for cp in root.findall(f"{ns}CommonPrefixes"):
+                prefix_text = cp.findtext(f"{ns}Prefix", "")
+                common_prefixes.append({"Prefix": prefix_text})
+            if common_prefixes:
+                result["CommonPrefixes"] = common_prefixes
+
+        return result
 
     def _prepare_put_object(
         self, Bucket: str, Key: str, **kwargs

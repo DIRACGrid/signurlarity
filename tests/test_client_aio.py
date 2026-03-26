@@ -258,6 +258,74 @@ async def test_put_object_missing_key_aio(s3_clients_aio):
 
 
 @pytest.mark.asyncio
+async def test_list_objects_empty_aio(s3_clients_aio):
+    """Test list_objects on a bucket with no matching prefix (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+
+    response = await async_light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="list-objects-nonexistent-prefix/"
+    )
+
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert response["Contents"] == []
+    assert response["IsTruncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_objects_aio(s3_clients_aio):
+    """Test list_objects returns uploaded objects (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    keys = ["list-test-aio/a.txt", "list-test-aio/b.txt", "list-test-aio/c.txt"]
+    for key in keys:
+        await boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = await async_light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="list-test-aio/"
+    )
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    returned_keys = {obj["Key"] for obj in response["Contents"]}
+    assert returned_keys.issuperset(set(keys))
+    for obj in response["Contents"]:
+        assert "Key" in obj
+        assert "ETag" in obj
+        assert "Size" in obj
+        assert "LastModified" in obj
+
+
+@pytest.mark.asyncio
+async def test_list_objects_with_delimiter_aio(s3_clients_aio):
+    """Test list_objects with delimiter groups common prefixes (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    keys = ["delim-test-aio/dir1/file.txt", "delim-test-aio/dir2/file.txt"]
+    for key in keys:
+        await boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = await async_light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="delim-test-aio/", Delimiter="/"
+    )
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert "CommonPrefixes" in response
+    prefixes = {cp["Prefix"] for cp in response["CommonPrefixes"]}
+    assert "delim-test-aio/dir1/" in prefixes
+    assert "delim-test-aio/dir2/" in prefixes
+
+
+@pytest.mark.asyncio
+async def test_list_objects_missing_bucket_aio(s3_clients_aio):
+    """Test that list_objects raises PresignError when Bucket is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.list_objects(Bucket="")
+
+
+@pytest.mark.asyncio
 async def test_delete_objects_aio(s3_clients_aio):
     """Test that delete_objects deletes multiple objects (async)."""
     boto_client, async_light_client = s3_clients_aio
