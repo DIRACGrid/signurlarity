@@ -4,6 +4,7 @@ import json
 import os
 import random
 import sys
+import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -480,4 +481,354 @@ async def test_delete_objects_perf_aio(rustfs_server, test_results_dir):
 
     result_file.write_text(json.dumps(results, indent=2))
 
+    print("=" * 60)
+
+
+@pytest.mark.asyncio
+async def test_put_object_perf_aio(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity async for put_object.
+
+    Uploads a 1 KB object per iteration to a unique key.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_put_object_perf_aio")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    rng = random.Random(42)  # noqa: S311
+    bucket = "perf-put-object-aio"
+    body = b"x" * 1024  # 1 KB
+
+    async_light_client = AsyncClient(**rustfs_server)
+    session = get_session()
+    async with session.create_client(
+        "s3", **rustfs_server, config=Config(signature_version="s3v4")
+    ) as boto_client:
+        await boto_client.create_bucket(Bucket=bucket)
+
+        iterations = 10
+
+        # Warm-up
+        for i in range(10):
+            await boto_client.put_object(
+                Bucket=bucket, Key=f"warmup-boto-{i}.txt", Body=body
+            )
+        for i in range(10):
+            await async_light_client.put_object(
+                Bucket=bucket, Key=f"warmup-light-{i}.txt", Body=body
+            )
+
+        async def run_boto(n: int):
+            for _ in range(n):
+                await boto_client.put_object(
+                    Bucket=bucket,
+                    Key=f"bench-boto-{rng.randint(0, 1_000_000)}.txt",
+                    Body=body,
+                )
+
+        async def run_custom(n: int):
+            for _ in range(n):
+                await async_light_client.put_object(
+                    Bucket=bucket,
+                    Key=f"bench-light-{rng.randint(0, 1_000_000)}.txt",
+                    Body=body,
+                )
+
+        t_boto = await _timeit_async_helper(run_boto, iterations)
+        t_custom = await _timeit_async_helper(run_custom, iterations)
+
+    await async_light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "put_object_aio",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("PUT OBJECT BENCHMARK (ASYNC)")
+    print("=" * 60)
+    print(
+        f"boto3 put_object: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity put_object (async): {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity async implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
+    print("=" * 60)
+
+
+@pytest.mark.asyncio
+async def test_list_objects_perf_aio(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity async for list_objects.
+
+    Pre-populates 10 objects and benchmarks listing them with a prefix filter.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_list_objects_perf_aio")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    bucket = "perf-list-objects-aio"
+    prefix = "bench/"
+
+    async_light_client = AsyncClient(**rustfs_server)
+    session = get_session()
+    async with session.create_client(
+        "s3", **rustfs_server, config=Config(signature_version="s3v4")
+    ) as boto_client:
+        await boto_client.create_bucket(Bucket=bucket)
+        for i in range(10):
+            await boto_client.put_object(
+                Bucket=bucket, Key=f"{prefix}obj-{i}.txt", Body=b"data"
+            )
+
+        iterations = 10
+
+        # Warm-up
+        for _ in range(10):
+            await boto_client.list_objects(Bucket=bucket, Prefix=prefix)
+        for _ in range(10):
+            await async_light_client.list_objects(Bucket=bucket, Prefix=prefix)
+
+        async def run_boto(n: int):
+            for _ in range(n):
+                await boto_client.list_objects(Bucket=bucket, Prefix=prefix)
+
+        async def run_custom(n: int):
+            for _ in range(n):
+                await async_light_client.list_objects(Bucket=bucket, Prefix=prefix)
+
+        t_boto = await _timeit_async_helper(run_boto, iterations)
+        t_custom = await _timeit_async_helper(run_custom, iterations)
+
+    await async_light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "list_objects_aio",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("LIST OBJECTS BENCHMARK (ASYNC)")
+    print("=" * 60)
+    print(
+        f"boto3 list_objects: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity list_objects (async): {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity async implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
+    print("=" * 60)
+
+
+@pytest.mark.asyncio
+async def test_copy_object_perf_aio(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity async for copy_object.
+
+    Pre-uploads a source object and benchmarks copying it to unique destination keys.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_copy_object_perf_aio")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    rng = random.Random(42)  # noqa: S311
+    bucket = "perf-copy-object-aio"
+    src_key = "source.txt"
+
+    async_light_client = AsyncClient(**rustfs_server)
+    session = get_session()
+    async with session.create_client(
+        "s3", **rustfs_server, config=Config(signature_version="s3v4")
+    ) as boto_client:
+        await boto_client.create_bucket(Bucket=bucket)
+        await boto_client.put_object(Bucket=bucket, Key=src_key, Body=b"source content")
+
+        iterations = 10
+
+        # Warm-up
+        for i in range(10):
+            await boto_client.copy_object(
+                Bucket=bucket,
+                Key=f"warmup-boto-{i}.txt",
+                CopySource={"Bucket": bucket, "Key": src_key},
+            )
+        for i in range(10):
+            await async_light_client.copy_object(
+                Bucket=bucket,
+                Key=f"warmup-light-{i}.txt",
+                CopySource=f"{bucket}/{src_key}",
+            )
+
+        async def run_boto(n: int):
+            for _ in range(n):
+                await boto_client.copy_object(
+                    Bucket=bucket,
+                    Key=f"bench-boto-{rng.randint(0, 1_000_000)}.txt",
+                    CopySource={"Bucket": bucket, "Key": src_key},
+                )
+
+        async def run_custom(n: int):
+            for _ in range(n):
+                await async_light_client.copy_object(
+                    Bucket=bucket,
+                    Key=f"bench-light-{rng.randint(0, 1_000_000)}.txt",
+                    CopySource=f"{bucket}/{src_key}",
+                )
+
+        t_boto = await _timeit_async_helper(run_boto, iterations)
+        t_custom = await _timeit_async_helper(run_custom, iterations)
+
+    await async_light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "copy_object_aio",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("COPY OBJECT BENCHMARK (ASYNC)")
+    print("=" * 60)
+    print(
+        f"boto3 copy_object: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity copy_object (async): {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity async implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
+    print("=" * 60)
+
+
+@pytest.mark.asyncio
+async def test_upload_file_perf_aio(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity async for upload_file.
+
+    Uses a 1 KB temporary file and uploads to unique keys per iteration.
+    aiobotocore has no upload_file; boto reference uses put_object with file read.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_upload_file_perf_aio")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    rng = random.Random(42)  # noqa: S311
+    bucket = "perf-upload-file-aio"
+
+    async_light_client = AsyncClient(**rustfs_server)
+    session = get_session()
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as tmp:
+        tmp.write(b"y" * 1024)  # 1 KB
+        tmp_path = tmp.name
+
+    try:
+        async with session.create_client(
+            "s3", **rustfs_server, config=Config(signature_version="s3v4")
+        ) as boto_client:
+            await boto_client.create_bucket(Bucket=bucket)
+
+            iterations = 10
+
+            # Warm-up (aiobotocore has no upload_file; use put_object with file read)
+            for i in range(10):
+                with open(tmp_path, "rb") as fh:  # noqa: PTH123
+                    await boto_client.put_object(
+                        Bucket=bucket, Key=f"warmup-boto-{i}.bin", Body=fh.read()
+                    )
+            for i in range(10):
+                await async_light_client.upload_file(
+                    Filename=tmp_path, Bucket=bucket, Key=f"warmup-light-{i}.bin"
+                )
+
+            async def run_boto(n: int):
+                for _ in range(n):
+                    with open(tmp_path, "rb") as fh:  # noqa: PTH123
+                        await boto_client.put_object(
+                            Bucket=bucket,
+                            Key=f"bench-boto-{rng.randint(0, 1_000_000)}.bin",
+                            Body=fh.read(),
+                        )
+
+            async def run_custom(n: int):
+                for _ in range(n):
+                    await async_light_client.upload_file(
+                        Filename=tmp_path,
+                        Bucket=bucket,
+                        Key=f"bench-light-{rng.randint(0, 1_000_000)}.bin",
+                    )
+
+            t_boto = await _timeit_async_helper(run_boto, iterations)
+            t_custom = await _timeit_async_helper(run_custom, iterations)
+    finally:
+        os.unlink(tmp_path)
+
+    await async_light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "upload_file_aio",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("UPLOAD FILE BENCHMARK (ASYNC)")
+    print("=" * 60)
+    print(
+        f"aiobotocore put_object (file): {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity upload_file (async): {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity async implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
     print("=" * 60)

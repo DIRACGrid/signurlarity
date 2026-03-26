@@ -4,6 +4,7 @@ import json
 import os
 import random
 import sys
+import tempfile
 from pathlib import Path
 
 import boto3
@@ -482,4 +483,333 @@ def test_delete_objects_perf_sync(rustfs_server, test_results_dir):
 
     result_file.write_text(json.dumps(results, indent=2))
 
+    print("=" * 60)
+
+
+def test_put_object_perf_sync(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity for put_object.
+
+    Uploads a 1 KB object per iteration to a unique key, comparing boto3 and
+    signurlarity implementations.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_put_object_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    rng = random.Random(42)  # noqa: S311
+    bucket = "perf-put-object"
+    body = b"x" * 1024  # 1 KB
+
+    boto_client = boto3.client("s3", **rustfs_server)
+    light_client = Client(**rustfs_server)
+
+    boto_client.create_bucket(Bucket=bucket)
+
+    iterations = 10
+
+    # Warm-up
+    for i in range(10):
+        boto_client.put_object(Bucket=bucket, Key=f"warmup-boto-{i}.txt", Body=body)
+    for i in range(10):
+        light_client.put_object(Bucket=bucket, Key=f"warmup-light-{i}.txt", Body=body)
+
+    def run_boto(n: int):
+        for _ in range(n):
+            boto_client.put_object(
+                Bucket=bucket,
+                Key=f"bench-boto-{rng.randint(0, 1_000_000)}.txt",
+                Body=body,
+            )
+
+    def run_custom(n: int):
+        for _ in range(n):
+            light_client.put_object(
+                Bucket=bucket,
+                Key=f"bench-light-{rng.randint(0, 1_000_000)}.txt",
+                Body=body,
+            )
+
+    t_boto = _timeit(run_boto, iterations)
+    t_custom = _timeit(run_custom, iterations)
+
+    light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "put_object_sync",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("PUT OBJECT BENCHMARK")
+    print("=" * 60)
+    print(
+        f"boto3 put_object: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity put_object: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
+    print("=" * 60)
+
+
+def test_list_objects_perf_sync(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity for list_objects.
+
+    Pre-populates 10 objects and benchmarks listing them with a prefix filter.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_list_objects_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    bucket = "perf-list-objects"
+    prefix = "bench/"
+
+    boto_client = boto3.client("s3", **rustfs_server)
+    light_client = Client(**rustfs_server)
+
+    boto_client.create_bucket(Bucket=bucket)
+    for i in range(10):
+        boto_client.put_object(Bucket=bucket, Key=f"{prefix}obj-{i}.txt", Body=b"data")
+
+    iterations = 10
+
+    # Warm-up
+    for _ in range(10):
+        boto_client.list_objects(Bucket=bucket, Prefix=prefix)
+    for _ in range(10):
+        light_client.list_objects(Bucket=bucket, Prefix=prefix)
+
+    def run_boto(n: int):
+        for _ in range(n):
+            boto_client.list_objects(Bucket=bucket, Prefix=prefix)
+
+    def run_custom(n: int):
+        for _ in range(n):
+            light_client.list_objects(Bucket=bucket, Prefix=prefix)
+
+    t_boto = _timeit(run_boto, iterations)
+    t_custom = _timeit(run_custom, iterations)
+
+    light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "list_objects_sync",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("LIST OBJECTS BENCHMARK")
+    print("=" * 60)
+    print(
+        f"boto3 list_objects: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity list_objects: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
+    print("=" * 60)
+
+
+def test_copy_object_perf_sync(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity for copy_object.
+
+    Pre-uploads a source object and benchmarks copying it to unique destination keys.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_copy_object_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    rng = random.Random(42)  # noqa: S311
+    bucket = "perf-copy-object"
+    src_key = "source.txt"
+
+    boto_client = boto3.client("s3", **rustfs_server)
+    light_client = Client(**rustfs_server)
+
+    boto_client.create_bucket(Bucket=bucket)
+    boto_client.put_object(Bucket=bucket, Key=src_key, Body=b"source content")
+
+    iterations = 10
+
+    # Warm-up
+    for i in range(10):
+        boto_client.copy_object(
+            Bucket=bucket,
+            Key=f"warmup-boto-{i}.txt",
+            CopySource={"Bucket": bucket, "Key": src_key},
+        )
+    for i in range(10):
+        light_client.copy_object(
+            Bucket=bucket,
+            Key=f"warmup-light-{i}.txt",
+            CopySource=f"{bucket}/{src_key}",
+        )
+
+    def run_boto(n: int):
+        for _ in range(n):
+            boto_client.copy_object(
+                Bucket=bucket,
+                Key=f"bench-boto-{rng.randint(0, 1_000_000)}.txt",
+                CopySource={"Bucket": bucket, "Key": src_key},
+            )
+
+    def run_custom(n: int):
+        for _ in range(n):
+            light_client.copy_object(
+                Bucket=bucket,
+                Key=f"bench-light-{rng.randint(0, 1_000_000)}.txt",
+                CopySource=f"{bucket}/{src_key}",
+            )
+
+    t_boto = _timeit(run_boto, iterations)
+    t_custom = _timeit(run_custom, iterations)
+
+    light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "copy_object_sync",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("COPY OBJECT BENCHMARK")
+    print("=" * 60)
+    print(
+        f"boto3 copy_object: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity copy_object: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
+    print("=" * 60)
+
+
+def test_upload_file_perf_sync(rustfs_server, test_results_dir):
+    """Compare performance of boto3 vs signurlarity for upload_file.
+
+    Uses a 1 KB temporary file and uploads to unique keys per iteration.
+    """
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_upload_file_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    rng = random.Random(42)  # noqa: S311
+    bucket = "perf-upload-file"
+
+    boto_client = boto3.client("s3", **rustfs_server)
+    light_client = Client(**rustfs_server)
+
+    boto_client.create_bucket(Bucket=bucket)
+
+    iterations = 10
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as tmp:
+        tmp.write(b"y" * 1024)  # 1 KB
+        tmp_path = tmp.name
+
+    try:
+        # Warm-up
+        for i in range(10):
+            boto_client.upload_file(
+                Filename=tmp_path, Bucket=bucket, Key=f"warmup-boto-{i}.bin"
+            )
+        for i in range(10):
+            light_client.upload_file(
+                Filename=tmp_path, Bucket=bucket, Key=f"warmup-light-{i}.bin"
+            )
+
+        def run_boto(n: int):
+            for _ in range(n):
+                boto_client.upload_file(
+                    Filename=tmp_path,
+                    Bucket=bucket,
+                    Key=f"bench-boto-{rng.randint(0, 1_000_000)}.bin",
+                )
+
+        def run_custom(n: int):
+            for _ in range(n):
+                light_client.upload_file(
+                    Filename=tmp_path,
+                    Bucket=bucket,
+                    Key=f"bench-light-{rng.randint(0, 1_000_000)}.bin",
+                )
+
+        t_boto = _timeit(run_boto, iterations)
+        t_custom = _timeit(run_custom, iterations)
+    finally:
+        os.unlink(tmp_path)
+        light_client.close()
+
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "upload_file_sync",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("UPLOAD FILE BENCHMARK")
+    print("=" * 60)
+    print(
+        f"boto3 upload_file: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity upload_file: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+
+    result_file.write_text(json.dumps(results, indent=2))
     print("=" * 60)
