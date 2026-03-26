@@ -328,6 +328,45 @@ class Client(_BaseClient):
         response = self._execute_request("PUT", url, signed_headers, body)
         return self._parse_create_bucket_response(response, Bucket)
 
+    def put_object(self, Bucket: str, Key: str, **kwargs) -> dict[str, Any]:
+        """Upload an object to an S3 bucket.
+
+        Performs a PUT request to upload an object to S3.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            Key: Object key / path in bucket (required)
+            **kwargs: Additional arguments including:
+                - Body: Object data as bytes (default: empty)
+                - ContentType: MIME type of the object
+                - ContentLength: Size of the body in bytes
+                - Metadata: dict of string key/value pairs stored as object metadata
+
+        Returns:
+            dict with response metadata containing:
+                - ETag: Entity tag of the uploaded object
+                - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
+
+        Raises:
+            PresignError: If required parameters are missing or request fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/put_object.html
+
+        Example:
+            >>> response = client.put_object(
+            ...     Bucket="mybucket",
+            ...     Key="myfile.txt",
+            ...     Body=b"Hello, world!",
+            ...     ContentType="text/plain",
+            ... )
+            >>> print(response["ETag"])
+
+        """
+        url, signed_headers, body = self._prepare_put_object(Bucket, Key, **kwargs)
+        response = self._execute_request("PUT", url, signed_headers, body)
+        return self._parse_put_object_response(response, Bucket, Key)
+
     def delete_objects(
         self, Bucket: str, Delete: dict[str, Any], **kwargs
     ) -> dict[str, Any]:

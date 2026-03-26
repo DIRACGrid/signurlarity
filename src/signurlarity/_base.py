@@ -407,6 +407,74 @@ class _BaseClient:
             },
         }
 
+    def _prepare_put_object(
+        self, Bucket: str, Key: str, **kwargs
+    ) -> tuple[str, dict[str, str], bytes]:
+        """Validate and build a signed PUT object request.
+
+        Returns:
+            Tuple of (url, signed_headers, body)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Key:
+            raise PresignError("Missing required parameter 'Key'")
+
+        base_url, path, headers = self._build_request_url(Bucket, Key)
+
+        body = kwargs.get("Body", b"") or b""
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+
+        if "ContentType" in kwargs:
+            headers["Content-Type"] = kwargs["ContentType"]
+        if "ContentLength" in kwargs:
+            headers["Content-Length"] = str(kwargs["ContentLength"])
+        if "Metadata" in kwargs:
+            for meta_key, meta_value in kwargs["Metadata"].items():
+                headers[f"x-amz-meta-{meta_key.lower()}"] = meta_value
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="PUT",
+            path=path,
+            headers=headers,
+            body=body,
+        )
+
+        url = base_url + path
+
+        return url, signed_headers, body
+
+    def _parse_put_object_response(
+        self, response: httpx.Response, Bucket: str, Key: str
+    ) -> dict[str, Any]:
+        """Parse PUT object response, raising on errors."""
+        if response.status_code == 404:
+            raise PresignError(f"Bucket '{Bucket}' does not exist or is not accessible")
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(f"Bad request for put_object '{Key}': {response.text}")
+        elif response.status_code not in (200, 201):
+            raise PresignError(
+                f"PUT request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        if "etag" in response.headers:
+            result["ETag"] = response.headers["etag"]
+
+        return result
+
     def _prepare_delete_objects(
         self, Bucket: str, Delete: dict[str, Any], **kwargs
     ) -> tuple[str, dict[str, str], bytes]:

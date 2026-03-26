@@ -194,6 +194,70 @@ async def test_generate_presigned_url_aio(s3_clients_aio, caplog):
 
 
 @pytest.mark.asyncio
+async def test_put_object_aio(s3_clients_aio):
+    """Test that put_object uploads bytes to a bucket (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    file_content = b"hello from put_object async"
+    key = "put-object-test-aio.txt"
+
+    response = await async_light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        ContentType="text/plain",
+    )
+
+    assert "ETag" in response
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] in (200, 201)
+
+    # Verify via boto
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(file_content)
+
+
+@pytest.mark.asyncio
+async def test_put_object_with_metadata_aio(s3_clients_aio):
+    """Test that put_object stores metadata on the object (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    file_content = b"data with metadata async"
+    key = "put-object-meta-test-aio.txt"
+
+    await async_light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        Metadata={"author": "test", "version": "1"},
+    )
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["Metadata"].get("author") == "test"
+    assert head["Metadata"].get("version") == "1"
+
+
+@pytest.mark.asyncio
+async def test_put_object_missing_bucket_aio(s3_clients_aio):
+    """Test that put_object raises PresignError when Bucket is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.put_object(Bucket="", Key="key.txt", Body=b"data")
+
+
+@pytest.mark.asyncio
+async def test_put_object_missing_key_aio(s3_clients_aio):
+    """Test that put_object raises PresignError when Key is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
+
+
+@pytest.mark.asyncio
 async def test_delete_objects_aio(s3_clients_aio):
     """Test that delete_objects deletes multiple objects (async)."""
     boto_client, async_light_client = s3_clients_aio

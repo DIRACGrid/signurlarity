@@ -176,6 +176,66 @@ def test_generate_presigned_url(s3_clients, caplog):
                 fh.write(chunk)
 
 
+def test_put_object(s3_clients):
+    """Test that put_object uploads bytes to a bucket."""
+    boto_client, light_client = s3_clients
+
+    file_content = b"hello from put_object"
+    key = "put-object-test.txt"
+
+    response = light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        ContentType="text/plain",
+    )
+
+    assert "ETag" in response
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] in (200, 201)
+
+    # Verify via boto
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(file_content)
+
+
+def test_put_object_with_metadata(s3_clients):
+    """Test that put_object stores metadata on the object."""
+    boto_client, light_client = s3_clients
+
+    file_content = b"data with metadata"
+    key = "put-object-meta-test.txt"
+
+    light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        Metadata={"author": "test", "version": "1"},
+    )
+
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["Metadata"].get("author") == "test"
+    assert head["Metadata"].get("version") == "1"
+
+
+def test_put_object_missing_bucket(s3_clients):
+    """Test that put_object raises PresignError when Bucket is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.put_object(Bucket="", Key="key.txt", Body=b"data")
+
+
+def test_put_object_missing_key(s3_clients):
+    """Test that put_object raises PresignError when Key is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
+
+
 def test_delete_objects(s3_clients):
     """Test that delete_objects deletes multiple objects."""
     boto_client, light_client = s3_clients
