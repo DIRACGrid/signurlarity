@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from typing import Any, Mapping, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape as xml_escape
 
@@ -406,6 +406,280 @@ class _BaseClient:
                 "HTTPHeaders": dict(response.headers),
             },
         }
+
+    def _prepare_copy_object(
+        self, Bucket: str, Key: str, CopySource: str | dict[str, str], **kwargs
+    ) -> tuple[str, dict[str, str]]:
+        """Validate and build a signed PUT copy-object request.
+
+        Returns:
+            Tuple of (url, signed_headers)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Key:
+            raise PresignError("Missing required parameter 'Key'")
+        if not CopySource:
+            raise PresignError("Missing required parameter 'CopySource'")
+
+        # Normalise CopySource to a "bucket/key" string
+        if isinstance(CopySource, dict):
+            src_bucket = CopySource.get("Bucket", "")
+            src_key = CopySource.get("Key", "")
+            if not src_bucket or not src_key:
+                raise PresignError(
+                    "CopySource dict must contain non-empty 'Bucket' and 'Key'"
+                )
+            copy_source_str = f"{src_bucket}/{src_key}"
+            version_id = CopySource.get("VersionId")
+            if version_id:
+                copy_source_str = f"{copy_source_str}?versionId={version_id}"
+        else:
+            copy_source_str = CopySource
+
+        base_url, path, headers = self._build_request_url(Bucket, Key)
+        headers["x-amz-copy-source"] = copy_source_str
+
+        if "MetadataDirective" in kwargs:
+            headers["x-amz-metadata-directive"] = kwargs["MetadataDirective"]
+        if "ContentType" in kwargs:
+            headers["Content-Type"] = kwargs["ContentType"]
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="PUT",
+            path=path,
+            headers=headers,
+        )
+
+        url = base_url + path
+
+        return url, signed_headers
+
+    def _parse_copy_object_response(
+        self, response: httpx.Response, Bucket: str, Key: str
+    ) -> dict[str, Any]:
+        """Parse copy-object response, raising on errors."""
+        if response.status_code == 404:
+            raise PresignError(
+                f"Source or destination not found for copy to '{Bucket}/{Key}'"
+            )
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied for copy to '{Bucket}/{Key}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(f"Bad request for copy_object '{Key}': {response.text}")
+        elif response.status_code != 200:
+            raise PresignError(
+                f"PUT copy request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        if response.text:
+            root = ElementTree.fromstring(response.text)  # noqa: S314
+            ns = ""
+            if root.tag.startswith("{"):
+                ns = root.tag.split("}")[0] + "}"
+            copy_result: dict[str, str] = {}
+            etag = root.findtext(f"{ns}ETag")
+            if etag:
+                copy_result["ETag"] = etag
+            last_modified = root.findtext(f"{ns}LastModified")
+            if last_modified:
+                copy_result["LastModified"] = last_modified
+            if copy_result:
+                result["CopyObjectResult"] = copy_result
+
+        return result
+
+    def _prepare_list_objects(
+        self, Bucket: str, **kwargs
+    ) -> tuple[str, dict[str, str]]:
+        """Validate and build a signed GET list-objects request.
+
+        Returns:
+            Tuple of (url, signed_headers)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+
+        base_url, path, headers = self._build_request_url(Bucket)
+
+        query_params: dict[str, str] = {}
+        if "Delimiter" in kwargs:
+            query_params["delimiter"] = kwargs["Delimiter"]
+        if "EncodingType" in kwargs:
+            query_params["encoding-type"] = kwargs["EncodingType"]
+        if "Marker" in kwargs:
+            query_params["marker"] = kwargs["Marker"]
+        if "MaxKeys" in kwargs:
+            query_params["max-keys"] = str(kwargs["MaxKeys"])
+        if "Prefix" in kwargs:
+            query_params["prefix"] = kwargs["Prefix"]
+
+        query_string = urlencode(query_params) if query_params else ""
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="GET",
+            path=path,
+            headers=headers,
+            query_string=query_string,
+        )
+
+        url = base_url + path
+        if query_string:
+            url = f"{url}?{query_string}"
+
+        return url, signed_headers
+
+    def _parse_list_objects_response(
+        self, response: httpx.Response, Bucket: str
+    ) -> dict[str, Any]:
+        """Parse list-objects response, raising on errors."""
+        if response.status_code == 404:
+            raise NoSuchBucketError(
+                f"Bucket '{Bucket}' does not exist or is not accessible"
+            )
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(
+                f"Bad request for list_objects on bucket '{Bucket}': {response.text}"
+            )
+        elif response.status_code != 200:
+            raise PresignError(
+                f"GET request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        if response.text:
+            root = ElementTree.fromstring(response.text)  # noqa: S314
+            ns = ""
+            if root.tag.startswith("{"):
+                ns = root.tag.split("}")[0] + "}"
+
+            result["Name"] = root.findtext(f"{ns}Name", Bucket)
+            result["Prefix"] = root.findtext(f"{ns}Prefix", "")
+            result["Delimiter"] = root.findtext(f"{ns}Delimiter", "")
+            max_keys_text = root.findtext(f"{ns}MaxKeys", "1000")
+            result["MaxKeys"] = int(max_keys_text) if max_keys_text else 1000
+            result["IsTruncated"] = (
+                root.findtext(f"{ns}IsTruncated", "false").lower() == "true"
+            )
+            next_marker = root.findtext(f"{ns}NextMarker")
+            if next_marker:
+                result["NextMarker"] = next_marker
+
+            contents = []
+            for obj in root.findall(f"{ns}Contents"):
+                entry: dict[str, Any] = {
+                    "Key": obj.findtext(f"{ns}Key", ""),
+                    "ETag": obj.findtext(f"{ns}ETag", ""),
+                    "Size": int(obj.findtext(f"{ns}Size", "0") or "0"),
+                    "LastModified": obj.findtext(f"{ns}LastModified", ""),
+                    "StorageClass": obj.findtext(f"{ns}StorageClass", ""),
+                }
+                owner_elem = obj.find(f"{ns}Owner")
+                if owner_elem is not None:
+                    entry["Owner"] = {
+                        "DisplayName": owner_elem.findtext(f"{ns}DisplayName", ""),
+                        "ID": owner_elem.findtext(f"{ns}ID", ""),
+                    }
+                contents.append(entry)
+            result["Contents"] = contents
+
+            common_prefixes = []
+            for cp in root.findall(f"{ns}CommonPrefixes"):
+                prefix_text = cp.findtext(f"{ns}Prefix", "")
+                common_prefixes.append({"Prefix": prefix_text})
+            if common_prefixes:
+                result["CommonPrefixes"] = common_prefixes
+
+        return result
+
+    def _prepare_put_object(
+        self, Bucket: str, Key: str, **kwargs
+    ) -> tuple[str, dict[str, str], bytes]:
+        """Validate and build a signed PUT object request.
+
+        Returns:
+            Tuple of (url, signed_headers, body)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Key:
+            raise PresignError("Missing required parameter 'Key'")
+
+        base_url, path, headers = self._build_request_url(Bucket, Key)
+
+        body = kwargs.get("Body", b"") or b""
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+
+        if "ContentType" in kwargs:
+            headers["Content-Type"] = kwargs["ContentType"]
+        if "ContentLength" in kwargs:
+            headers["Content-Length"] = str(kwargs["ContentLength"])
+        if "Metadata" in kwargs:
+            for meta_key, meta_value in kwargs["Metadata"].items():
+                headers[f"x-amz-meta-{meta_key.lower()}"] = meta_value
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="PUT",
+            path=path,
+            headers=headers,
+            body=body,
+        )
+
+        url = base_url + path
+
+        return url, signed_headers, body
+
+    def _parse_put_object_response(
+        self, response: httpx.Response, Bucket: str, Key: str
+    ) -> dict[str, Any]:
+        """Parse PUT object response, raising on errors."""
+        if response.status_code == 404:
+            raise PresignError(f"Bucket '{Bucket}' does not exist or is not accessible")
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(f"Bad request for put_object '{Key}': {response.text}")
+        elif response.status_code not in (200, 201):
+            raise PresignError(
+                f"PUT request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        if "etag" in response.headers:
+            result["ETag"] = response.headers["etag"]
+
+        return result
 
     def _prepare_delete_objects(
         self, Bucket: str, Delete: dict[str, Any], **kwargs

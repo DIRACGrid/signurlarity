@@ -176,6 +176,243 @@ def test_generate_presigned_url(s3_clients, caplog):
                 fh.write(chunk)
 
 
+def test_put_object(s3_clients):
+    """Test that put_object uploads bytes to a bucket."""
+    boto_client, light_client = s3_clients
+
+    file_content = b"hello from put_object"
+    key = "put-object-test.txt"
+
+    response = light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        ContentType="text/plain",
+    )
+
+    assert "ETag" in response
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] in (200, 201)
+
+    # Verify via boto
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(file_content)
+
+
+def test_put_object_with_metadata(s3_clients):
+    """Test that put_object stores metadata on the object."""
+    boto_client, light_client = s3_clients
+
+    file_content = b"data with metadata"
+    key = "put-object-meta-test.txt"
+
+    light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        Metadata={"author": "test", "version": "1"},
+    )
+
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["Metadata"].get("author") == "test"
+    assert head["Metadata"].get("version") == "1"
+
+
+def test_put_object_missing_bucket(s3_clients):
+    """Test that put_object raises PresignError when Bucket is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.put_object(Bucket="", Key="key.txt", Body=b"data")
+
+
+def test_put_object_missing_key(s3_clients):
+    """Test that put_object raises PresignError when Key is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
+
+
+def test_list_objects_empty(s3_clients):
+    """Test list_objects on a bucket with no matching prefix."""
+    _boto_client, light_client = s3_clients
+
+    response = light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="list-objects-nonexistent-prefix/"
+    )
+
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert response["Contents"] == []
+    assert response["IsTruncated"] is False
+
+
+def test_list_objects(s3_clients):
+    """Test list_objects returns uploaded objects."""
+    boto_client, light_client = s3_clients
+
+    keys = ["list-test/a.txt", "list-test/b.txt", "list-test/c.txt"]
+    for key in keys:
+        boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = light_client.list_objects(Bucket=BUCKET_NAME, Prefix="list-test/")
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    returned_keys = {obj["Key"] for obj in response["Contents"]}
+    assert returned_keys.issuperset(set(keys))
+    for obj in response["Contents"]:
+        assert "Key" in obj
+        assert "ETag" in obj
+        assert "Size" in obj
+        assert "LastModified" in obj
+
+
+def test_list_objects_with_delimiter(s3_clients):
+    """Test list_objects with delimiter groups common prefixes."""
+    boto_client, light_client = s3_clients
+
+    keys = ["delim-test/dir1/file.txt", "delim-test/dir2/file.txt"]
+    for key in keys:
+        boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="delim-test/", Delimiter="/"
+    )
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert "CommonPrefixes" in response
+    prefixes = {cp["Prefix"] for cp in response["CommonPrefixes"]}
+    assert "delim-test/dir1/" in prefixes
+    assert "delim-test/dir2/" in prefixes
+
+
+def test_list_objects_missing_bucket(s3_clients):
+    """Test that list_objects raises PresignError when Bucket is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.list_objects(Bucket="")
+
+
+def test_copy_object(s3_clients):
+    """Test that copy_object copies an object using a string CopySource."""
+    boto_client, light_client = s3_clients
+
+    src_key = "copy-src.txt"
+    dst_key = "copy-dst.txt"
+    boto_client.put_object(Body=b"copy me", Bucket=BUCKET_NAME, Key=src_key)
+
+    response = light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource=f"{BUCKET_NAME}/{src_key}",
+    )
+
+    assert "CopyObjectResult" in response
+    assert "ETag" in response["CopyObjectResult"]
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    # Verify destination exists
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+    assert head["ContentLength"] == len(b"copy me")
+
+
+def test_copy_object_dict_source(s3_clients):
+    """Test that copy_object works with a dict CopySource."""
+    boto_client, light_client = s3_clients
+
+    src_key = "copy-src-dict.txt"
+    dst_key = "copy-dst-dict.txt"
+    boto_client.put_object(Body=b"dict source", Bucket=BUCKET_NAME, Key=src_key)
+
+    response = light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource={"Bucket": BUCKET_NAME, "Key": src_key},
+    )
+
+    assert "CopyObjectResult" in response
+    boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+
+
+def test_copy_object_missing_bucket(s3_clients):
+    """Test that copy_object raises PresignError when Bucket is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.copy_object(
+            Bucket="", Key="dst.txt", CopySource=f"{BUCKET_NAME}/src.txt"
+        )
+
+
+def test_copy_object_missing_copy_source(s3_clients):
+    """Test that copy_object raises PresignError when CopySource is missing."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(PresignError):
+        light_client.copy_object(Bucket=BUCKET_NAME, Key="dst.txt", CopySource="")
+
+
+def test_upload_file(s3_clients, tmp_path):
+    """Test that upload_file uploads a local file to S3."""
+    boto_client, light_client = s3_clients
+
+    content = b"file content to upload"
+    local_file = tmp_path / "upload_test.txt"
+    local_file.write_bytes(content)
+
+    key = "upload-file-test.txt"
+    result = light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+    )
+
+    assert result is None
+
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(content)
+
+
+def test_upload_file_with_extra_args(s3_clients, tmp_path):
+    """Test that upload_file forwards ExtraArgs to put_object."""
+    boto_client, light_client = s3_clients
+
+    content = b"pdf content"
+    local_file = tmp_path / "report.pdf"
+    local_file.write_bytes(content)
+
+    key = "upload-file-extra-args.pdf"
+    light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+        ExtraArgs={"ContentType": "application/pdf"},
+    )
+
+    head = boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentType"] == "application/pdf"
+    assert head["ContentLength"] == len(content)
+
+
+def test_upload_file_missing_file(s3_clients):
+    """Test that upload_file raises OSError for a non-existent file."""
+    _boto_client, light_client = s3_clients
+    with pytest.raises(OSError):
+        light_client.upload_file(
+            Filename="/nonexistent/path/file.txt",
+            Bucket=BUCKET_NAME,
+            Key="key.txt",
+        )
+
+
 def test_delete_objects(s3_clients):
     """Test that delete_objects deletes multiple objects."""
     boto_client, light_client = s3_clients

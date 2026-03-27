@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -341,6 +343,177 @@ class AsyncClient(_BaseClient):
         url, signed_headers, body = self._prepare_create_bucket(Bucket, **kwargs)
         response = await self._execute_request("PUT", url, signed_headers, body)
         return self._parse_create_bucket_response(response, Bucket)
+
+    async def upload_file(
+        self,
+        Filename: str,
+        Bucket: str,
+        Key: str,
+        ExtraArgs: dict[str, Any] | None = None,
+    ) -> None:
+        """Upload a local file to an S3 bucket.
+
+        Reads the file at ``Filename`` and uploads it via :meth:`put_object`.
+        This is a single-part upload; for very large files consider using
+        multipart upload directly.
+
+        Args:
+            Filename: Local file path to upload (required)
+            Bucket: S3 bucket name (required)
+            Key: Destination object key in the bucket (required)
+            ExtraArgs: Optional dict of additional keyword arguments forwarded
+                to :meth:`put_object` (e.g. ``ContentType``, ``Metadata``).
+
+        Returns:
+            None
+
+        Raises:
+            PresignError: If required parameters are missing or the upload fails
+            OSError: If the file cannot be read
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/upload_file.html
+
+        Example:
+            >>> await client.upload_file(
+            ...     Filename="/tmp/report.pdf",
+            ...     Bucket="mybucket",
+            ...     Key="reports/report.pdf",
+            ...     ExtraArgs={"ContentType": "application/pdf"},
+            ... )
+
+        """
+        body = await asyncio.to_thread(Path(Filename).read_bytes)
+        kwargs = ExtraArgs or {}
+        await self.put_object(Bucket=Bucket, Key=Key, Body=body, **kwargs)
+
+    async def copy_object(
+        self,
+        Bucket: str,
+        Key: str,
+        CopySource: str | dict[str, str],
+        **kwargs,
+    ) -> dict[str, Any]:
+        """Copy an S3 object to a new location.
+
+        Performs a PUT request with the x-amz-copy-source header to copy
+        an object within or across buckets.
+
+        Args:
+            Bucket: Destination S3 bucket name (required)
+            Key: Destination object key (required)
+            CopySource: Source of the copy. Either a string ``"bucket/key"``
+                or a dict ``{"Bucket": "...", "Key": "...", "VersionId": "..."}``.
+            **kwargs: Additional arguments including:
+                - MetadataDirective: 'COPY' (default) or 'REPLACE'
+                - ContentType: Override content type (requires MetadataDirective='REPLACE')
+
+        Returns:
+            dict with copy result containing:
+                - CopyObjectResult: dict with ETag and LastModified of the new object
+                - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
+
+        Raises:
+            PresignError: If required parameters are missing or request fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/copy_object.html
+
+        Example:
+            >>> response = await client.copy_object(
+            ...     Bucket="dest-bucket",
+            ...     Key="dest/key.txt",
+            ...     CopySource="src-bucket/src/key.txt",
+            ... )
+            >>> print(response["CopyObjectResult"]["ETag"])
+
+        """
+        url, signed_headers = self._prepare_copy_object(
+            Bucket, Key, CopySource, **kwargs
+        )
+        response = await self._execute_request("PUT", url, signed_headers)
+        return self._parse_copy_object_response(response, Bucket, Key)
+
+    async def list_objects(self, Bucket: str, **kwargs) -> dict[str, Any]:
+        """List objects in an S3 bucket (list-objects v1).
+
+        Performs a GET request to list objects in a bucket.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            **kwargs: Additional arguments including:
+                - Delimiter: Character to group keys (e.g. '/')
+                - EncodingType: Encoding type for keys (e.g. 'url')
+                - Marker: Key to start listing from (pagination)
+                - MaxKeys: Maximum number of keys to return (default 1000)
+                - Prefix: Limit results to keys beginning with this prefix
+
+        Returns:
+            dict with listing results containing:
+                - Contents: List of object dicts (Key, ETag, Size, LastModified, StorageClass)
+                - CommonPrefixes: List of prefix dicts (when Delimiter is set)
+                - IsTruncated: True if there are more results
+                - NextMarker: Key to use as Marker for the next page (if IsTruncated)
+                - Name: Bucket name
+                - Prefix: Prefix used in the request
+                - MaxKeys: MaxKeys used in the request
+                - ResponseMetadata: Response metadata
+
+        Raises:
+            NoSuchBucketError: If bucket does not exist
+            PresignError: If request signing or execution fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/list_objects.html
+
+        Example:
+            >>> response = await client.list_objects(Bucket="mybucket", Prefix="logs/")
+            >>> for obj in response["Contents"]:
+            ...     print(obj["Key"])
+
+        """
+        url, signed_headers = self._prepare_list_objects(Bucket, **kwargs)
+        response = await self._execute_request("GET", url, signed_headers)
+        return self._parse_list_objects_response(response, Bucket)
+
+    async def put_object(self, Bucket: str, Key: str, **kwargs) -> dict[str, Any]:
+        """Upload an object to an S3 bucket.
+
+        Performs a PUT request to upload an object to S3.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            Key: Object key / path in bucket (required)
+            **kwargs: Additional arguments including:
+                - Body: Object data as bytes (default: empty)
+                - ContentType: MIME type of the object
+                - ContentLength: Size of the body in bytes
+                - Metadata: dict of string key/value pairs stored as object metadata
+
+        Returns:
+            dict with response metadata containing:
+                - ETag: Entity tag of the uploaded object
+                - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
+
+        Raises:
+            PresignError: If required parameters are missing or request fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/put_object.html
+
+        Example:
+            >>> response = await client.put_object(
+            ...     Bucket="mybucket",
+            ...     Key="myfile.txt",
+            ...     Body=b"Hello, world!",
+            ...     ContentType="text/plain",
+            ... )
+            >>> print(response["ETag"])
+
+        """
+        url, signed_headers, body = self._prepare_put_object(Bucket, Key, **kwargs)
+        response = await self._execute_request("PUT", url, signed_headers, body)
+        return self._parse_put_object_response(response, Bucket, Key)
 
     async def delete_objects(
         self, Bucket: str, Delete: dict[str, Any], **kwargs

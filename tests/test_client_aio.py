@@ -194,6 +194,263 @@ async def test_generate_presigned_url_aio(s3_clients_aio, caplog):
 
 
 @pytest.mark.asyncio
+async def test_put_object_aio(s3_clients_aio):
+    """Test that put_object uploads bytes to a bucket (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    file_content = b"hello from put_object async"
+    key = "put-object-test-aio.txt"
+
+    response = await async_light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        ContentType="text/plain",
+    )
+
+    assert "ETag" in response
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] in (200, 201)
+
+    # Verify via boto
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(file_content)
+
+
+@pytest.mark.asyncio
+async def test_put_object_with_metadata_aio(s3_clients_aio):
+    """Test that put_object stores metadata on the object (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    file_content = b"data with metadata async"
+    key = "put-object-meta-test-aio.txt"
+
+    await async_light_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=file_content,
+        Metadata={"author": "test", "version": "1"},
+    )
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["Metadata"].get("author") == "test"
+    assert head["Metadata"].get("version") == "1"
+
+
+@pytest.mark.asyncio
+async def test_put_object_missing_bucket_aio(s3_clients_aio):
+    """Test that put_object raises PresignError when Bucket is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.put_object(Bucket="", Key="key.txt", Body=b"data")
+
+
+@pytest.mark.asyncio
+async def test_put_object_missing_key_aio(s3_clients_aio):
+    """Test that put_object raises PresignError when Key is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
+
+
+@pytest.mark.asyncio
+async def test_list_objects_empty_aio(s3_clients_aio):
+    """Test list_objects on a bucket with no matching prefix (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+
+    response = await async_light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="list-objects-nonexistent-prefix/"
+    )
+
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert response["Contents"] == []
+    assert response["IsTruncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_objects_aio(s3_clients_aio):
+    """Test list_objects returns uploaded objects (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    keys = ["list-test-aio/a.txt", "list-test-aio/b.txt", "list-test-aio/c.txt"]
+    for key in keys:
+        await boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = await async_light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="list-test-aio/"
+    )
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    returned_keys = {obj["Key"] for obj in response["Contents"]}
+    assert returned_keys.issuperset(set(keys))
+    for obj in response["Contents"]:
+        assert "Key" in obj
+        assert "ETag" in obj
+        assert "Size" in obj
+        assert "LastModified" in obj
+
+
+@pytest.mark.asyncio
+async def test_list_objects_with_delimiter_aio(s3_clients_aio):
+    """Test list_objects with delimiter groups common prefixes (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    keys = ["delim-test-aio/dir1/file.txt", "delim-test-aio/dir2/file.txt"]
+    for key in keys:
+        await boto_client.put_object(Body=b"data", Bucket=BUCKET_NAME, Key=key)
+
+    response = await async_light_client.list_objects(
+        Bucket=BUCKET_NAME, Prefix="delim-test-aio/", Delimiter="/"
+    )
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert "CommonPrefixes" in response
+    prefixes = {cp["Prefix"] for cp in response["CommonPrefixes"]}
+    assert "delim-test-aio/dir1/" in prefixes
+    assert "delim-test-aio/dir2/" in prefixes
+
+
+@pytest.mark.asyncio
+async def test_list_objects_missing_bucket_aio(s3_clients_aio):
+    """Test that list_objects raises PresignError when Bucket is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.list_objects(Bucket="")
+
+
+@pytest.mark.asyncio
+async def test_copy_object_aio(s3_clients_aio):
+    """Test that copy_object copies an object using a string CopySource (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    src_key = "copy-src-aio.txt"
+    dst_key = "copy-dst-aio.txt"
+    await boto_client.put_object(Body=b"copy me async", Bucket=BUCKET_NAME, Key=src_key)
+
+    response = await async_light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource=f"{BUCKET_NAME}/{src_key}",
+    )
+
+    assert "CopyObjectResult" in response
+    assert "ETag" in response["CopyObjectResult"]
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+    assert head["ContentLength"] == len(b"copy me async")
+
+
+@pytest.mark.asyncio
+async def test_copy_object_dict_source_aio(s3_clients_aio):
+    """Test that copy_object works with a dict CopySource (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    src_key = "copy-src-dict-aio.txt"
+    dst_key = "copy-dst-dict-aio.txt"
+    await boto_client.put_object(
+        Body=b"dict source async", Bucket=BUCKET_NAME, Key=src_key
+    )
+
+    response = await async_light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource={"Bucket": BUCKET_NAME, "Key": src_key},
+    )
+
+    assert "CopyObjectResult" in response
+    await boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
+
+
+@pytest.mark.asyncio
+async def test_copy_object_missing_bucket_aio(s3_clients_aio):
+    """Test that copy_object raises PresignError when Bucket is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.copy_object(
+            Bucket="", Key="dst.txt", CopySource=f"{BUCKET_NAME}/src.txt"
+        )
+
+
+@pytest.mark.asyncio
+async def test_copy_object_missing_copy_source_aio(s3_clients_aio):
+    """Test that copy_object raises PresignError when CopySource is missing (async)."""
+    from signurlarity.exceptions import PresignError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(PresignError):
+        await async_light_client.copy_object(
+            Bucket=BUCKET_NAME, Key="dst.txt", CopySource=""
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_file_aio(s3_clients_aio, tmp_path):
+    """Test that upload_file uploads a local file to S3 (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    content = b"async file content to upload"
+    local_file = tmp_path / "upload_test_aio.txt"
+    local_file.write_bytes(content)
+
+    key = "upload-file-test-aio.txt"
+    result = await async_light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+    )
+
+    assert result is None
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentLength"] == len(content)
+
+
+@pytest.mark.asyncio
+async def test_upload_file_with_extra_args_aio(s3_clients_aio, tmp_path):
+    """Test that upload_file forwards ExtraArgs to put_object (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    content = b"async pdf content"
+    local_file = tmp_path / "report_aio.pdf"
+    local_file.write_bytes(content)
+
+    key = "upload-file-extra-args-aio.pdf"
+    await async_light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+        ExtraArgs={"ContentType": "application/pdf"},
+    )
+
+    head = await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    assert head["ContentType"] == "application/pdf"
+    assert head["ContentLength"] == len(content)
+
+
+@pytest.mark.asyncio
+async def test_upload_file_missing_file_aio(s3_clients_aio):
+    """Test that upload_file raises OSError for a non-existent file (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(OSError):
+        await async_light_client.upload_file(
+            Filename="/nonexistent/path/file.txt",
+            Bucket=BUCKET_NAME,
+            Key="key.txt",
+        )
+
+
+@pytest.mark.asyncio
 async def test_delete_objects_aio(s3_clients_aio):
     """Test that delete_objects deletes multiple objects (async)."""
     boto_client, async_light_client = s3_clients_aio
