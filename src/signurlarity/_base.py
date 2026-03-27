@@ -637,6 +637,8 @@ class _BaseClient:
             headers["Content-Type"] = kwargs["ContentType"]
         if "ContentLength" in kwargs:
             headers["Content-Length"] = str(kwargs["ContentLength"])
+        if "ACL" in kwargs and kwargs["ACL"] is not None:
+            headers["x-amz-acl"] = str(kwargs["ACL"])
         if "Metadata" in kwargs:
             for meta_key, meta_value in kwargs["Metadata"].items():
                 headers[f"x-amz-meta-{meta_key.lower()}"] = meta_value
