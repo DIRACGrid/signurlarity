@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -381,8 +383,7 @@ class AsyncClient(_BaseClient):
             ... )
 
         """
-        with open(Filename, "rb") as fh:  # noqa: PTH123
-            body = fh.read()
+        body = await asyncio.to_thread(Path(Filename).read_bytes)
         kwargs = ExtraArgs or {}
         await self.put_object(Bucket=Bucket, Key=Key, Body=body, **kwargs)
 
