@@ -195,8 +195,7 @@ async def s3_clients_aio(request):
 
         try:
             await boto_client.head_bucket(Bucket=AIO_BUCKET_NAME)
-        except Exception as e:
-            print(f"CHRIS {e!r}")
+        except Exception:
             await boto_client.create_bucket(Bucket=AIO_BUCKET_NAME)
 
         yield boto_client, async_light_client

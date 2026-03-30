@@ -439,6 +439,38 @@ async def test_upload_file_with_extra_args_aio(s3_clients_aio, tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "s3_clients_aio",
+    [pytest.param("moto_server", marks=pytest.mark.moto)],
+    indirect=True,
+)
+async def test_upload_file_with_acl_extra_args_aio(s3_clients_aio, tmp_path):
+    """Test that upload_file applies ACL from ExtraArgs (moto only)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    content = b"async acl content"
+    local_file = tmp_path / "acl_aio.txt"
+    local_file.write_bytes(content)
+
+    key = "upload-file-acl-aio.txt"
+    await async_light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+        ExtraArgs={"ACL": "public-read"},
+    )
+
+    acl = await boto_client.get_object_acl(Bucket=BUCKET_NAME, Key=key)
+    grants = acl.get("Grants", [])
+    assert any(
+        grant.get("Permission") == "READ"
+        and grant.get("Grantee", {}).get("URI")
+        == "http://acs.amazonaws.com/groups/global/AllUsers"
+        for grant in grants
+    )
+
+
+@pytest.mark.asyncio
 async def test_upload_file_missing_file_aio(s3_clients_aio):
     """Test that upload_file raises OSError for a non-existent file (async)."""
     _boto_client, async_light_client = s3_clients_aio

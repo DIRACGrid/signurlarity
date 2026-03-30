@@ -402,6 +402,38 @@ def test_upload_file_with_extra_args(s3_clients, tmp_path):
     assert head["ContentLength"] == len(content)
 
 
+# Only Moto exposes the correct ACL api
+@pytest.mark.parametrize(
+    "s3_clients",
+    [pytest.param("moto_server", marks=pytest.mark.moto)],
+    indirect=True,
+)
+def test_upload_file_with_acl_extra_args(s3_clients, tmp_path):
+    """Test that upload_file applies ACL from ExtraArgs (moto only)."""
+    boto_client, light_client = s3_clients
+
+    content = b"acl content"
+    local_file = tmp_path / "acl.txt"
+    local_file.write_bytes(content)
+
+    key = "upload-file-acl.txt"
+    light_client.upload_file(
+        Filename=str(local_file),
+        Bucket=BUCKET_NAME,
+        Key=key,
+        ExtraArgs={"ACL": "public-read"},
+    )
+
+    acl = boto_client.get_object_acl(Bucket=BUCKET_NAME, Key=key)
+    grants = acl.get("Grants", [])
+    assert any(
+        grant.get("Permission") == "READ"
+        and grant.get("Grantee", {}).get("URI")
+        == "http://acs.amazonaws.com/groups/global/AllUsers"
+        for grant in grants
+    ), grants
+
+
 def test_upload_file_missing_file(s3_clients):
     """Test that upload_file raises OSError for a non-existent file."""
     _boto_client, light_client = s3_clients
