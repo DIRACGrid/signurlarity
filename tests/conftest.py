@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import os
 import random
+import signal
+import subprocess
+import time
+from tempfile import TemporaryDirectory
 
 import boto3
 import botocore
@@ -14,13 +20,6 @@ from botocore.client import Config
 
 from signurlarity import Client
 from signurlarity.aio import AsyncClient
-
-# logging.basicConfig(
-#     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
-#     datefmt="%Y-%m-%d %H:%M:%S",
-#     level=logging.DEBUG,
-# )
-
 
 # Constants
 BUCKET_NAME = "test-bucket"
@@ -143,9 +142,159 @@ def minio_server():
     subprocess.run(cmd, check=True)  # noqa: S603
 
 
+@pytest.fixture(scope="module")
+def seaweedfs_server():
+    """Run a SeaweedFS server with S3 API enabled.
+
+    Because it creates volumes on the fly, we have to upload a file
+    and wait for the initialization to be over, otherwise all the tests
+    fail.
+    """
+    AWS_ACCESS_KEY_ID = "admin"
+    AWS_SECRET_ACCESS_KEY = "key"  # noqa: S105
+
+    def check_volume_status(max_retries=10, retry_delay=5):
+        cmd = ["weed", "shell"]
+        # Use echo to send the command to weed shell
+        input_cmd = "cluster.status\n"
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                process = subprocess.Popen(  # noqa: S603
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                stdout, _stderr = process.communicate(input=input_cmd, timeout=15)
+
+                # Check if "7 volume" is in the output
+                if "7 volume" in stdout:
+                    print("Found '7 volume' in output!")
+                    return
+
+                print(
+                    f"'7 volume' not found (attempt {attempt}/{max_retries}), "
+                    f"retrying in {retry_delay} seconds..."
+                )
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, _stderr = process.communicate()
+                print(
+                    f"weed shell timed out (attempt {attempt}/{max_retries}), "
+                    f"retrying in {retry_delay} seconds..."
+                )
+            except Exception as exc:
+                print(
+                    f"Error checking volume status (attempt {attempt}/{max_retries}): {exc}"
+                )
+
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+
+        raise RuntimeError(
+            f"SeaweedFS did not report '7 volume' after {max_retries} attempts"
+        )
+
+    with TemporaryDirectory() as tmp_dir:
+        os.mkdir(f"{tmp_dir}/seaweedfs")
+        with open(f"{tmp_dir}/seaweedfs_s3.json", "wt") as f:
+            json.dump(
+                {
+                    "identities": [
+                        {
+                            "name": "admin",
+                            "credentials": [
+                                {
+                                    "accessKey": AWS_ACCESS_KEY_ID,
+                                    "secretKey": AWS_SECRET_ACCESS_KEY,
+                                }
+                            ],
+                            "actions": ["Admin", "Read", "Write", "List", "Tagging"],
+                        }
+                    ]
+                },
+                f,
+            )
+        cmd = [
+            "weed",
+            "mini",
+            "-dir",
+            f"{tmp_dir}/seaweedfs",
+            "-s3.config",
+            f"{tmp_dir}/seaweedfs_s3.json",
+        ]
+        with open(f"{tmp_dir}/seaweedfs.log", "w") as log_file:
+            pid = None
+            try:
+                process = subprocess.Popen(  # noqa: S603
+                    cmd,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,  # Redirect stderr to stdout
+                )
+
+                pid = process.pid
+                print(f"Process PID: {pid} Working Directory {tmp_dir}")
+                upload_cmd = [
+                    "weed",
+                    "upload",
+                    "-master",
+                    "localhost:9333",
+                    f"{tmp_dir}/seaweedfs.log",
+                ]
+                max_retries = 10
+                retry_delay = 5
+
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        subprocess.run(  # noqa: S603
+                            upload_cmd, check=True, capture_output=True, text=True
+                        )
+                        print("Upload successful!")
+                        break
+                    except subprocess.CalledProcessError as e:
+                        if attempt >= max_retries:
+                            raise RuntimeError(
+                                f"Upload failed after {max_retries} attempts: {e.stderr}"
+                            ) from e
+                        print(
+                            f"Upload failed (attempt {attempt}/{max_retries}), "
+                            f"retrying in {retry_delay} seconds... (Error: {e.stderr})"
+                        )
+                        time.sleep(retry_delay)
+                check_volume_status()
+
+                yield {
+                    "endpoint_url": "http://localhost:8333",
+                    "aws_access_key_id": AWS_ACCESS_KEY_ID,
+                    "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
+                }
+            except RuntimeError as e:
+                print(e)
+                log_file.flush()
+                print("=== SeaweedFS log start ===")
+                try:
+                    with open(
+                        f"{tmp_dir}/seaweedfs.log",
+                        "rt",
+                        encoding="utf-8",
+                        errors="replace",
+                    ) as read_log:
+                        print(read_log.read())
+                except OSError as log_error:
+                    print(f"Failed to read SeaweedFS log file: {log_error}")
+                print("=== SeaweedFS log end ===")
+                raise
+            finally:
+                if pid:
+                    os.kill(pid, signal.SIGKILL)
+
+
 # Synchronous client fixtures
 @pytest.fixture(
-    scope="function", params=["minio_server", "moto_server", "rustfs_server"]
+    scope="function",
+    params=["minio_server", "moto_server", "rustfs_server", "seaweedfs_server"],
 )
 def s3_clients(request):
     """S3 clients for synchronous tests with multiple server backends.
@@ -171,7 +320,8 @@ def s3_clients(request):
 
 # Asynchronous client fixtures
 @pytest.fixture(
-    scope="function", params=["minio_server", "moto_server", "rustfs_server"]
+    scope="function",
+    params=["minio_server", "moto_server", "rustfs_server", "seaweedfs_server"],
 )
 async def s3_clients_aio(request):
     """S3 clients for asynchronous tests with multiple server backends.

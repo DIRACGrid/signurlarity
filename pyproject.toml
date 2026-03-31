@@ -120,6 +120,7 @@ py314 = { features = ["testing", "py314"] }
 
 [tool.pixi.feature.testing.dependencies]
 flamegraph-pl = "*"
+seaweedfs = "*"
 
 [tool.pixi.feature.testing.pypi-dependencies]
 flameprof = "*"
