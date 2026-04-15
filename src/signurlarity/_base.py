@@ -353,6 +353,9 @@ class _BaseClient:
 
         base_url, path, headers = self._build_request_url(Bucket)
 
+        if "ACL" in kwargs and kwargs["ACL"] is not None:
+            headers["x-amz-acl"] = str(kwargs["ACL"])
+
         body = b""
         if "CreateBucketConfiguration" in kwargs:
             config = kwargs["CreateBucketConfiguration"]
@@ -445,6 +448,8 @@ class _BaseClient:
             headers["x-amz-metadata-directive"] = kwargs["MetadataDirective"]
         if "ContentType" in kwargs:
             headers["Content-Type"] = kwargs["ContentType"]
+        if "ACL" in kwargs and kwargs["ACL"] is not None:
+            headers["x-amz-acl"] = str(kwargs["ACL"])
 
         signed_headers = self._presigner.sign_request_headers(
             method="PUT",
