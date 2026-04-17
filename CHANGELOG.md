@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/DIRACGrid/signurlarity/compare/v0.2.1...v0.2.2) (2026-04-16)
+
+
+### Bug Fixes
+
+* more ACL fixes ([#30](https://github.com/DIRACGrid/signurlarity/issues/30)) ([bd29aa8](https://github.com/DIRACGrid/signurlarity/commit/bd29aa8cee2e237f27b9eb49434ec3b740b7aade))
+
 ## [0.2.1](https://github.com/DIRACGrid/signurlarity/compare/v0.2.0...v0.2.1) (2026-03-30)
 
 
