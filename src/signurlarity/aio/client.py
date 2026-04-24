@@ -560,3 +560,31 @@ class AsyncClient(_BaseClient):
         )
         response = await self._execute_request("POST", url, signed_headers, body)
         return self._parse_delete_objects_response(response, Bucket)
+
+    async def delete_bucket(self, Bucket: str, **kwargs) -> dict[str, Any]:
+        """Delete an S3 bucket.
+
+        Performs a DELETE request to remove the bucket.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            **kwargs: Additional arguments (ExpectedBucketOwner, etc.)
+
+        Returns:
+            dict with response metadata containing:
+                - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
+
+        Raises:
+            NoSuchBucketError: If bucket does not exist or is not accessible
+            PresignError: If request signing or execution fails
+
+        Reference:
+            https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/delete_bucket.html
+
+        Example:
+            >>> response = await client.delete_bucket(Bucket="mybucket")
+
+        """
+        url, signed_headers = self._prepare_delete_bucket(Bucket, **kwargs)
+        response = await self._execute_request("DELETE", url, signed_headers)
+        return self._parse_delete_bucket_response(response, Bucket)
