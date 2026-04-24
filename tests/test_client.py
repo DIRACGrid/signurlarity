@@ -542,9 +542,10 @@ def test_delete_bucket(s3_clients):
     boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
 
     # Delete objects before deleting bucket
+    objects = light_client.list_objects(Bucket=BUCKET_NAME)
     light_client.delete_objects(
         Bucket=BUCKET_NAME,
-        Delete={"Objects": [{"Key": key}]},
+        Delete={"Objects": [{"Key": obj["Key"]} for obj in objects["Contents"]]},
     )
 
     # Delete bucket using our async client
