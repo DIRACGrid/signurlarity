@@ -803,3 +803,71 @@ class _BaseClient:
                 result["Errors"] = errors
 
         return result
+
+    def _prepare_delete_bucket(
+        self, Bucket: str, **kwargs
+    ) -> tuple[str, dict[str, str]]:
+        """Validate and build a signed DELETE bucket request.
+
+        Args:
+            Bucket: S3 bucket name
+            **kwargs: Additional arguments (e.g., ExpectedBucketOwner)
+
+        Returns:
+            Tuple of (url, signed_headers)
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+
+        base_url, path, headers = self._build_request_url(Bucket)
+
+        query_params = {}
+        if "ExpectedBucketOwner" in kwargs:
+            query_params["expected-bucket-owner"] = kwargs["ExpectedBucketOwner"]
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="DELETE",
+            path=path,
+            headers=headers,
+        )
+
+        url = base_url + path
+        if query_params:
+            url = f"{url}?{self._build_query_string(query_params)}"
+
+        return url, signed_headers
+
+    def _parse_delete_bucket_response(
+        self,
+        response: httpx.Response,
+        Bucket: str,
+    ) -> dict[str, Any]:
+        """Parse delete bucket response, raising on errors."""
+        if response.status_code == 404:
+            raise NoSuchBucketError(
+                f"Bucket '{Bucket}' does not exist or is not accessible"
+            )
+        elif response.status_code == 409:
+            raise PresignError(f"Bucket '{Bucket}' is not empty.")
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(
+                f"Bad request for delete_bucket '{Bucket}': {response.text}"
+            )
+        elif response.status_code not in (200, 204):
+            raise PresignError(
+                f"DELETE request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        return result
