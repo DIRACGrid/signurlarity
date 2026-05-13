@@ -39,6 +39,7 @@ testing = [
   "pytest-asyncio",
   "aiobotocore>=2.15",
   "botocore>=1.35",
+  "boto3>=1.35",
   "moto[server]",
   "httpx",
   "pytest-xdist",

@@ -11,7 +11,7 @@ import pytest
 from aiobotocore.session import get_session
 from botocore.client import Config
 
-from conftest import _timeit_async_helper
+from conftest import _timeit_async_helper  # noqa: F401
 from signurlarity.aio import AsyncClient
 
 

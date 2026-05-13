@@ -11,7 +11,7 @@ import boto3
 import pytest
 from botocore.client import Config
 
-from conftest import _timeit
+from conftest import _timeit  # noqa: F401
 from signurlarity import Client
 
 
