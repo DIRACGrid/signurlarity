@@ -3,15 +3,13 @@ from __future__ import annotations
 import json
 import os
 import random
-import sys
 import tempfile
-from pathlib import Path
 
 import boto3
 import pytest
 from botocore.client import Config
 
-from conftest import _timeit
+from conftest import _benchmark_result_path, _timeit
 from signurlarity import Client
 
 
@@ -21,10 +19,7 @@ def test_generate_presigned_post_perf_sync(rustfs_server, test_results_dir):
     This is a non-failing, informational test: it prints timings and skips
     if the signurlarity implementation is not available.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_generate_presigned_post_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_generate_presigned_post_perf")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-bucket"
@@ -88,7 +83,7 @@ def test_generate_presigned_post_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "generate_presigned_post_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -108,10 +103,7 @@ def test_generate_presigned_url_perf_sync(rustfs_server, test_results_dir):
     This benchmark compares boto3's generate_presigned_url with the custom
     implementation that has zero boto3 dependencies.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_generate_presigned_url_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_generate_presigned_url_perf")
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-bucket"
     key = "object.txt"
@@ -166,7 +158,7 @@ def test_generate_presigned_url_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "generate_presigned_url_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -186,10 +178,7 @@ def test_head_bucket_perf_sync(rustfs_server, test_results_dir):
     This benchmark compares boto3's head_bucket with the custom
     implementation that has zero boto3 dependencies.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_head_bucket_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_head_bucket_perf")
     bucket = "perf-bucket"
 
     # Extract region from endpoint_url
@@ -223,7 +212,7 @@ def test_head_bucket_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "head_bucket_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -242,10 +231,7 @@ def test_head_object_perf_sync(rustfs_server, test_results_dir):
     This benchmark compares boto3's head_object with the custom
     implementation that has zero boto3 dependencies.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_head_object_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_head_object_perf")
     bucket = "perf-object"
     key = "perf-object.txt"
 
@@ -283,7 +269,7 @@ def test_head_object_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "head_object_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -322,10 +308,7 @@ def test_create_bucket_perf_sync(rustfs_server, test_results_dir):
     This benchmark compares boto3's create_bucket with the signurlarity
     implementation that uses httpx with AWS Signature V4.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_create_bucket_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_create_bucket_perf")
 
     boto_client = boto3.client("s3", **rustfs_server)
     light_client = Client(**rustfs_server)
@@ -361,7 +344,7 @@ def test_create_bucket_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "create_bucket_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -400,10 +383,7 @@ def test_delete_objects_perf_sync(rustfs_server, test_results_dir):
     This benchmark compares boto3's delete_objects with the signurlarity
     implementation that uses httpx with AWS Signature V4.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_delete_objects_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_delete_objects_perf")
 
     bucket = "perf-delete-objects"
     num_keys = 10
@@ -454,7 +434,7 @@ def test_delete_objects_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "delete_objects_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -492,10 +472,7 @@ def test_put_object_perf_sync(rustfs_server, test_results_dir):
     Uploads a 1 KB object per iteration to a unique key, comparing boto3 and
     signurlarity implementations.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_put_object_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_put_object_perf")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-put-object"
@@ -535,7 +512,7 @@ def test_put_object_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "put_object_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -571,10 +548,7 @@ def test_list_objects_perf_sync(rustfs_server, test_results_dir):
 
     Pre-populates 10 objects and benchmarks listing them with a prefix filter.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_list_objects_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_list_objects_perf")
 
     bucket = "perf-list-objects"
     prefix = "bench/"
@@ -607,7 +581,7 @@ def test_list_objects_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "list_objects_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -643,10 +617,7 @@ def test_copy_object_perf_sync(rustfs_server, test_results_dir):
 
     Pre-uploads a source object and benchmarks copying it to unique destination keys.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_copy_object_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_copy_object_perf")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-copy-object"
@@ -695,7 +666,7 @@ def test_copy_object_perf_sync(rustfs_server, test_results_dir):
 
     light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "copy_object_sync",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -731,10 +702,7 @@ def test_upload_file_perf_sync(rustfs_server, test_results_dir):
 
     Uses a 1 KB temporary file and uploads to unique keys per iteration.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_upload_file_perf")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_upload_file_perf")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-upload-file"
@@ -784,7 +752,7 @@ def test_upload_file_perf_sync(rustfs_server, test_results_dir):
         light_client.close()
 
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "upload_file_sync",
         "iterations": iterations,
         "boto_total": t_boto,
