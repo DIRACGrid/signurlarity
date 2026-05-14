@@ -11,7 +11,7 @@ import boto3
 import pytest
 from botocore.client import Config
 
-from conftest import _timeit
+from conftest import _timeit, _write_benchmark_results
 from signurlarity import Client
 
 
@@ -87,19 +87,16 @@ def test_generate_presigned_post_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_light, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "generate_presigned_post_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "generate_presigned_post_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     print(results)
-    result_file.write_text(json.dumps(results, indent=2))
 
 
 def test_generate_presigned_url_perf_sync(rustfs_server, test_results_dir):
@@ -165,19 +162,16 @@ def test_generate_presigned_url_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "generate_presigned_url_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "generate_presigned_url_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     print(results)
-    result_file.write_text(json.dumps(results, indent=2))
 
 
 def test_head_bucket_perf_sync(rustfs_server, test_results_dir):
@@ -222,18 +216,15 @@ def test_head_bucket_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "head_bucket_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "head_bucket_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
-    result_file.write_text(json.dumps(results, indent=2))
 
 
 def test_head_object_perf_sync(rustfs_server, test_results_dir):
@@ -282,16 +273,14 @@ def test_head_object_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "head_object_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "head_object_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     # Informational output
     print("\n" + "=" * 60)
@@ -311,7 +300,6 @@ def test_head_object_perf_sync(rustfs_server, test_results_dir):
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
-    result_file.write_text(json.dumps(results, indent=2))
 
     print("=" * 60)
 
@@ -360,16 +348,14 @@ def test_create_bucket_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "create_bucket_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "create_bucket_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     # Informational output
     print("\n" + "=" * 60)
@@ -389,7 +375,6 @@ def test_create_bucket_perf_sync(rustfs_server, test_results_dir):
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
-    result_file.write_text(json.dumps(results, indent=2))
 
     print("=" * 60)
 
@@ -453,16 +438,14 @@ def test_delete_objects_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "delete_objects_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "delete_objects_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     print("\n" + "=" * 60)
     print("DELETE OBJECTS BENCHMARK")
@@ -481,7 +464,6 @@ def test_delete_objects_perf_sync(rustfs_server, test_results_dir):
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
-    result_file.write_text(json.dumps(results, indent=2))
 
     print("=" * 60)
 
@@ -534,16 +516,14 @@ def test_put_object_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "put_object_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "put_object_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     print("\n" + "=" * 60)
     print("PUT OBJECT BENCHMARK")
@@ -562,7 +542,6 @@ def test_put_object_perf_sync(rustfs_server, test_results_dir):
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
-    result_file.write_text(json.dumps(results, indent=2))
     print("=" * 60)
 
 
@@ -606,16 +585,14 @@ def test_list_objects_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "list_objects_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "list_objects_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     print("\n" + "=" * 60)
     print("LIST OBJECTS BENCHMARK")
@@ -634,7 +611,6 @@ def test_list_objects_perf_sync(rustfs_server, test_results_dir):
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
-    result_file.write_text(json.dumps(results, indent=2))
     print("=" * 60)
 
 
@@ -694,16 +670,14 @@ def test_copy_object_perf_sync(rustfs_server, test_results_dir):
     t_custom = _timeit(run_custom, iterations)
 
     light_client.close()
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "copy_object_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "copy_object_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     print("\n" + "=" * 60)
     print("COPY OBJECT BENCHMARK")
@@ -722,7 +696,6 @@ def test_copy_object_perf_sync(rustfs_server, test_results_dir):
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
-    result_file.write_text(json.dumps(results, indent=2))
     print("=" * 60)
 
 
@@ -783,16 +756,14 @@ def test_upload_file_perf_sync(rustfs_server, test_results_dir):
         os.unlink(tmp_path)
         light_client.close()
 
-    results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
-        "tested_method": "upload_file_sync",
-        "iterations": iterations,
-        "boto_total": t_boto,
-        "signurlarity_total": t_custom,
-        "boto_ops": iterations / t_boto,
-        "signurlarity_ops": iterations / t_custom,
-        "speedup": t_boto / t_custom,
-    }
+    results = _write_benchmark_results(
+        result_file,
+        py_vers,
+        "upload_file_sync",
+        iterations,
+        t_boto,
+        t_custom,
+    )
 
     print("\n" + "=" * 60)
     print("UPLOAD FILE BENCHMARK")
@@ -811,5 +782,4 @@ def test_upload_file_perf_sync(rustfs_server, test_results_dir):
         else:
             print(f"boto3 is {1 / speedup:.2f}x faster")
 
-    result_file.write_text(json.dumps(results, indent=2))
     print("=" * 60)
