@@ -544,6 +544,7 @@ class S3Presigner:
                 {"x-amz-algorithm": "AWS4-HMAC-SHA256"},
                 {"x-amz-credential": credential},
                 {"x-amz-date": amz_date},
+                {"X-Amz-Date": amz_date},
             ]
         )
 

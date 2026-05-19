@@ -268,6 +268,8 @@ def seaweedfs_server():
             )
         cmd = [
             "weed",
+            "-v",
+            "4",
             "mini",
             "-dir",
             f"{tmp_dir}/seaweedfs",
