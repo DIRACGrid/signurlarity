@@ -364,14 +364,30 @@ class S3Presigner:
         signed_headers_list = []
 
         # Always include host
-        host = headers["host"]
+        host = headers["host"].strip()
         canonical_headers_list.append(f"host:{host}")
         signed_headers_list.append("host")
+
+        for header_name, header_value in headers.items():
+            lower_name = header_name.lower()
+            if lower_name in {"host", "authorization"}:
+                continue
+            normalized_value = " ".join(str(header_value).split())
+            canonical_headers_list.append(f"{lower_name}:{normalized_value}")
+            signed_headers_list.append(lower_name)
+
+        # x-amz-date must be part of SignedHeaders for header-auth SigV4.
+        canonical_headers_list.append(f"x-amz-date:{amz_date}")
+        signed_headers_list.append("x-amz-date")
 
         # Calculate and include x-amz-content-sha256 header
         payload_hash = hashlib.sha256(body).hexdigest()
         canonical_headers_list.append(f"x-amz-content-sha256:{payload_hash}")
         signed_headers_list.append("x-amz-content-sha256")
+
+        # SigV4 requires lowercase headers and SignedHeaders to be sorted by name.
+        canonical_headers_list.sort()
+        signed_headers_list.sort()
 
         # Add any other headers that should be signed (optional)
         canonical_headers = "\n".join(canonical_headers_list) + "\n"
