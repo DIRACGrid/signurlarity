@@ -1,86 +1,36 @@
+"""Test fixtures for the benchmark_tests directory.
+
+This file re-exports constants, utilities, and timing functions from the root conftest.py.
+Pytest fixtures defined in root conftest.py are automatically available.
+"""
+
 from __future__ import annotations
 
-import time
+import importlib.util
+import sys
 from pathlib import Path
 
-import pytest
+# Add project root to path so we can import root_conftest_module
+_project_root = str(Path(__file__).parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
+# Import root conftest as a module with a unique name
+_root_conftest_path = str(Path(_project_root) / "conftest.py")
+spec = importlib.util.spec_from_file_location(
+    "root_conftest_module", _root_conftest_path
+)
+root_conftest_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(root_conftest_module)
 
-def pytest_addoption(parser):
-    parser.addoption(
-        "--test-results-dir",
-        type=Path,
-        default=None,
-        help="Path to store the perf test results",
-    )
-
-
-@pytest.fixture(scope="module")
-def test_results_dir(request) -> Path:
-    test_results_dir = request.config.getoption("--test-results-dir")
-    if test_results_dir is None:
-        pytest.skip(
-            "Requires a directory to store the test results with --test-results-dir"
-        )
-    test_results_dir = test_results_dir.resolve()
-    yield test_results_dir
-
-
-@pytest.fixture(scope="module")
-def rustfs_server():
-    """Spawn a test rustfs image for benchmarking."""
-    AWS_ACCESS_KEY_ID = "rustfsadmin"
-    AWS_SECRET_ACCESS_KEY = "rustfsadmin"  # noqa: S105
-    import subprocess
-
-    cmd = [
-        "docker",
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        "rustfs_local",
-        "-p",
-        "9000:9000",
-        "-p",
-        "9001:9001",
-        "rustfs/rustfs:latest",
-        "/data",
-    ]
-    subprocess.run(cmd, check=True)  # noqa: S603
-    time.sleep(1)  # Wait for server to start
-    yield {
-        "endpoint_url": "http://localhost:9000",
-        "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-    }
-    cmd = ["docker", "stop", "rustfs_local"]
-    subprocess.run(cmd, check=True)  # noqa: S603
-
-
-def _timeit(fn, iterations: int) -> float:
-    """Measure execution time of a function."""
-    import time
-
-    start = time.perf_counter()
-    fn(iterations)
-    return time.perf_counter() - start
-
-
-def _timeit_async(fn, iterations: int) -> float:
-    """Measure execution time of an async function."""
-    import asyncio
-    import time
-
-    start = time.perf_counter()
-    asyncio.run(fn(iterations))
-    return time.perf_counter() - start
-
-
-async def _timeit_async_helper(fn, iterations: int) -> float:
-    """Measure the execution time of an async function within async context."""
-    import time
-
-    start = time.perf_counter()
-    await fn(iterations)
-    return time.perf_counter() - start
+# Re-export constants, utilities, and timing functions
+# (fixtures are automatically available via pytest, but we need these for direct imports)
+BUCKET_NAME = root_conftest_module.BUCKET_NAME
+CHECKSUM_ALGORITHM = root_conftest_module.CHECKSUM_ALGORITHM
+MISSING_BUCKET_NAME = root_conftest_module.MISSING_BUCKET_NAME
+OTHER_BUCKET_NAME = root_conftest_module.OTHER_BUCKET_NAME
+_timeit = root_conftest_module._timeit
+_timeit_async = root_conftest_module._timeit_async
+_timeit_async_helper = root_conftest_module._timeit_async_helper
+b16_to_b64 = root_conftest_module.b16_to_b64
+random_file = root_conftest_module.random_file
