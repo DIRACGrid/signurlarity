@@ -224,6 +224,8 @@ def seaweedfs_server():
             f"{tmp_dir}/seaweedfs",
             "-s3.config",
             f"{tmp_dir}/seaweedfs_s3.json",
+            # explicitely disable deleting non empty bucket
+            "-s3.allowDeleteBucketNotEmpty=false",
         ]
         with open(f"{tmp_dir}/seaweedfs.log", "w") as log_file:
             pid = None
