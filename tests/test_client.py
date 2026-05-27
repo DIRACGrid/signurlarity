@@ -533,23 +533,25 @@ def test_delete_objects_missing_objects(s3_clients):
 def test_delete_bucket(s3_clients):
     """Test that delete_bucket correctly deleted."""
     boto_client, light_client = s3_clients
+    bucket_name = "test-bucket-to-delete"
 
+    boto_client.create_bucket(Bucket=bucket_name)
     # Create some objects using boto
     key = "delete-test-1.txt"
-    boto_client.put_object(Body=b"test content", Bucket=BUCKET_NAME, Key=key)
+    boto_client.put_object(Body=b"test content", Bucket=bucket_name, Key=key)
 
     # Verify objects exist
-    boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+    boto_client.head_object(Bucket=bucket_name, Key=key)
 
     # Delete objects before deleting bucket
-    objects = light_client.list_objects(Bucket=BUCKET_NAME)
+    objects = light_client.list_objects(Bucket=bucket_name)
     light_client.delete_objects(
-        Bucket=BUCKET_NAME,
+        Bucket=bucket_name,
         Delete={"Objects": [{"Key": obj["Key"]} for obj in objects["Contents"]]},
     )
 
     # Delete bucket using our async client
-    response = light_client.delete_bucket(Bucket=BUCKET_NAME)
+    response = light_client.delete_bucket(Bucket=bucket_name)
     assert "ResponseMetadata" in response
     assert response["ResponseMetadata"]["HTTPStatusCode"] == 204
     assert "Contents" not in response
