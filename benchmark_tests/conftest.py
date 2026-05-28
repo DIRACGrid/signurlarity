@@ -44,7 +44,7 @@ def rustfs_server():
         "9000:9000",
         "-p",
         "9001:9001",
-        "rustfs/rustfs:latest",
+        "rustfs/rustfs:1.0.0-beta.3",
         "/data",
     ]
     subprocess.run(cmd, check=True)  # noqa: S603
