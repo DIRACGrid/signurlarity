@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/DIRACGrid/signurlarity/compare/v0.2.2...v0.3.0) (2026-05-29)
+
+
+### Features
+
+* add delete bucket method in client ([#32](https://github.com/DIRACGrid/signurlarity/issues/32)) ([da76128](https://github.com/DIRACGrid/signurlarity/commit/da76128655244c85d6c4d53b535c2f2a969ad1cf))
+
+
+### Bug Fixes
+
+* correct v4 headers. See https://github.com/seaweedfs/seaweedfs/pull/9121 ([#36](https://github.com/DIRACGrid/signurlarity/issues/36)) ([3646065](https://github.com/DIRACGrid/signurlarity/commit/3646065c483d5ea29862e4f090edd6f8a8374a16))
+
 ## [0.2.2](https://github.com/DIRACGrid/signurlarity/compare/v0.2.1...v0.2.2) (2026-04-16)
 
 
