@@ -569,3 +569,59 @@ async def test_delete_objects_missing_objects_aio(s3_clients_aio):
             Bucket=BUCKET_NAME,
             Delete={"Objects": []},
         )
+
+
+@pytest.mark.asyncio
+async def test_delete_bucket_aio(s3_clients_aio):
+    """Test that delete_bucket correctly deleted."""
+    boto_client, async_light_client = s3_clients_aio
+    bucket_name = "test-bucket-to-delete-aio"
+
+    await boto_client.create_bucket(Bucket=bucket_name)
+    # Create some objects using boto
+    key = "delete-test-1.txt"
+    await boto_client.put_object(Body=b"test content", Bucket=bucket_name, Key=key)
+
+    # Verify objects exist
+    await boto_client.head_object(Bucket=bucket_name, Key=key)
+
+    # Delete objects before deleting bucket
+    objects = await async_light_client.list_objects(Bucket=bucket_name)
+    if objects.get("Contents"):
+        await async_light_client.delete_objects(
+            Bucket=bucket_name,
+            Delete={"Objects": [{"Key": obj["Key"]} for obj in objects["Contents"]]},
+        )
+    # Delete bucket using our async client
+    response = await async_light_client.delete_bucket(Bucket=bucket_name)
+    assert "ResponseMetadata" in response
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 204
+    assert "Contents" not in response
+
+
+@pytest.mark.asyncio
+async def test_delete_bucket_missing_bucket_aio(s3_clients_aio):
+    """Test that delete_bucket raises PresignError for missing Bucket (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import PresignError
+
+    with pytest.raises(PresignError):
+        await async_light_client.delete_bucket(Bucket="")
+
+
+@pytest.mark.asyncio
+async def test_delete_bucket_not_empty_aio(s3_clients_aio):
+    """Test that delete_bucket raises PresignError if Bucket is not empty (async)."""
+    boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import PresignError
+
+    # Create some objects using boto
+    key = "delete-test-1.txt"
+    await boto_client.put_object(Body=b"test content", Bucket=BUCKET_NAME, Key=key)
+
+    # Verify objects exist
+    await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+    # Try to delete non empty bucket
+    with pytest.raises(PresignError):
+        await async_light_client.delete_bucket(Bucket=BUCKET_NAME)
