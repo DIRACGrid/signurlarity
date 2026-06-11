@@ -269,6 +269,25 @@ def test_put_object_missing_key(s3_clients):
         light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
 
 
+# SeaweedFS accepts a PUT to a missing bucket (auto-creates it) instead of
+# returning 404, so it never raises NoSuchBucketError.
+@pytest.mark.parametrize(
+    "s3_clients",
+    [
+        "minio_server",
+        "moto_server",
+        "rustfs_server",
+        pytest.param(
+            "seaweedfs_server",
+            marks=pytest.mark.xfail(
+                reason="SeaweedFS auto-creates the bucket on PUT instead of "
+                "returning 404 NoSuchBucket",
+                strict=True,
+            ),
+        ),
+    ],
+    indirect=True,
+)
 def test_put_object_bucket_not_found(s3_clients):
     """Test that put_object raises NoSuchBucketError for a missing bucket."""
     from signurlarity.exceptions import NoSuchBucketError
@@ -402,6 +421,25 @@ def test_copy_object_missing_copy_source(s3_clients):
         light_client.copy_object(Bucket=BUCKET_NAME, Key="dst.txt", CopySource="")
 
 
+# SeaweedFS returns 400 InvalidArgument when the copy source object cannot be
+# resolved, rather than the 404 NoSuchKey returned by AWS/moto/minio/rustfs.
+@pytest.mark.parametrize(
+    "s3_clients",
+    [
+        "minio_server",
+        "moto_server",
+        "rustfs_server",
+        pytest.param(
+            "seaweedfs_server",
+            marks=pytest.mark.xfail(
+                reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
+                "source instead of 404 NoSuchKey",
+                strict=True,
+            ),
+        ),
+    ],
+    indirect=True,
+)
 def test_copy_object_source_not_found(s3_clients):
     """Test that copy_object raises NoSuchKeyError when the source is missing."""
     from signurlarity.exceptions import NoSuchKeyError
