@@ -100,7 +100,7 @@ class _BaseClient:
             # For custom endpoints, use path-style URLs
             actual_host = parsed.netloc
             if key:
-                path = f"/{bucket}/{key}"
+                path = f"/{bucket}/{self._presigner._uri_encode_path(key)}"
             else:
                 path = f"/{bucket}"
             base_url = f"{scheme}://{actual_host}"
@@ -108,7 +108,7 @@ class _BaseClient:
         else:
             # For AWS endpoints, use virtual-hosted style
             actual_host = self._presigner._get_host(bucket)
-            path = f"/{key}" if key else "/"
+            path = f"/{self._presigner._uri_encode_path(key)}" if key else "/"
             base_url = f"{scheme}://{actual_host}"
             headers = {"host": actual_host}
 

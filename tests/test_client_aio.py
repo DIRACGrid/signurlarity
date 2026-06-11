@@ -93,6 +93,40 @@ async def test_head_object_exists_aio(s3_clients_aio):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key",
+    [
+        "diracAdmin/admin/admin/sha256:abc123.tar.zst",  # the real-world trigger
+        "with space/file.txt",
+        "plus+sign/file.txt",
+    ],
+)
+async def test_head_object_special_chars_aio(s3_clients_aio, key):
+    """head_object must work for keys with chars that require percent-encoding.
+
+    A signature-validating backend (minio, rustfs) percent-encodes the request
+    path per the SigV4 spec before recomputing the signature, so the canonical
+    URI we sign must be encoded the same way. Keys containing ':', spaces or '+'
+    previously produced a SignatureDoesNotMatch -> 403.
+    """
+    boto_client, async_light_client = s3_clients_aio
+
+    file_content = b"test content for special-char head_object"
+    await boto_client.put_object(
+        Body=file_content, Bucket=BUCKET_NAME, Key=key, ContentType="text/plain"
+    )
+
+    # Sanity: the key is legal on the backend.
+    await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+    response = await async_light_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert response["ContentLength"] == len(file_content)
+    assert response["ContentType"] == "text/plain"
+
+
+@pytest.mark.asyncio
 async def test_head_object_not_found_aio(s3_clients_aio):
     """Test that head_object raises PresignError for non-existent object."""
     _boto_client, async_light_client = s3_clients_aio

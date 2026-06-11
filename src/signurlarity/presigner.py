@@ -296,7 +296,13 @@ class S3Presigner:
 
         Args:
             method: HTTP method (GET, HEAD, PUT, POST, DELETE, etc.)
-            path: Request path relative to host (e.g., '/' for bucket, '/key' for object)
+            path: URL-encoded request path relative to host, exactly as it will
+                appear on the wire (e.g., '/' for bucket, '/key' for object). The
+                path is used verbatim as the canonical URI, so any characters that
+                require percent-encoding (':', spaces, '+', etc.) must already be
+                encoded by the caller (see ``_uri_encode_path``). Passing a raw,
+                unencoded key produces a canonical URI that mismatches what a
+                signature-validating backend computes, yielding SignatureDoesNotMatch.
             headers: Request headers dict (must include 'host')
             timestamp: Optional fixed timestamp for testing. Default: current UTC time
             body: Request body bytes. Default: empty bytes
