@@ -126,6 +126,31 @@ class NoSuchBucketError(SignurlarityError):
     pass
 
 
+class NoSuchKeyError(SignurlarityError):
+    """Raised when an S3 object (key) does not exist.
+
+    This exception is raised during object operations when the requested
+    key cannot be found in the bucket. For copy operations it indicates
+    that the source object does not exist.
+
+    Corresponds to an HTTP 404 status code on object-level requests.
+
+    Note:
+        HEAD requests return no response body, so the server cannot always
+        distinguish a missing object from a missing bucket. This exception
+        reflects the most common cause (a missing key); a genuinely missing
+        bucket may also surface as a 404. Use NoSuchBucketError to catch the
+        bucket-missing case explicitly where it can be distinguished.
+
+    Example:
+        >>> client.head_object(Bucket="mybucket", Key="missing.txt")
+        NoSuchKeyError: Object 'missing.txt' in bucket 'mybucket' does not exist or is not accessible
+
+    """
+
+    pass
+
+
 class BucketAlreadyExistsError(SignurlarityError):
     """Raised when trying to create a bucket that already exists.
 

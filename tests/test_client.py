@@ -109,11 +109,11 @@ def test_head_object_special_chars(s3_clients, key):
 
 
 def test_head_object_not_found(s3_clients):
-    """Test that head_object raises PresignError for non-existent object."""
+    """Test that head_object raises NoSuchKeyError for non-existent object."""
     _boto_client, light_client = s3_clients
-    from signurlarity.exceptions import PresignError
+    from signurlarity.exceptions import NoSuchKeyError
 
-    with pytest.raises(PresignError):
+    with pytest.raises(NoSuchKeyError):
         light_client.head_object(Bucket=BUCKET_NAME, Key="nonexistent_key.txt")
 
 
@@ -269,6 +269,15 @@ def test_put_object_missing_key(s3_clients):
         light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
 
 
+def test_put_object_bucket_not_found(s3_clients):
+    """Test that put_object raises NoSuchBucketError for a missing bucket."""
+    from signurlarity.exceptions import NoSuchBucketError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(NoSuchBucketError):
+        light_client.put_object(Bucket=MISSING_BUCKET_NAME, Key="key.txt", Body=b"data")
+
+
 def test_list_objects_empty(s3_clients):
     """Test list_objects on a bucket with no matching prefix."""
     _boto_client, light_client = s3_clients
@@ -391,6 +400,19 @@ def test_copy_object_missing_copy_source(s3_clients):
     _boto_client, light_client = s3_clients
     with pytest.raises(PresignError):
         light_client.copy_object(Bucket=BUCKET_NAME, Key="dst.txt", CopySource="")
+
+
+def test_copy_object_source_not_found(s3_clients):
+    """Test that copy_object raises NoSuchKeyError when the source is missing."""
+    from signurlarity.exceptions import NoSuchKeyError
+
+    _boto_client, light_client = s3_clients
+    with pytest.raises(NoSuchKeyError):
+        light_client.copy_object(
+            Bucket=BUCKET_NAME,
+            Key="copy-dst-missing-src.txt",
+            CopySource=f"{BUCKET_NAME}/nonexistent-source-key.txt",
+        )
 
 
 def test_upload_file(s3_clients, tmp_path):

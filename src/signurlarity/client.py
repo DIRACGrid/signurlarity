@@ -278,7 +278,7 @@ class Client(_BaseClient):
                 - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
 
         Raises:
-            NoSuchBucketError: If bucket does not exist
+            NoSuchKeyError: If the object does not exist
             PresignError: If request signing or execution fails
 
         Reference:
@@ -399,6 +399,7 @@ class Client(_BaseClient):
                 - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
 
         Raises:
+            NoSuchKeyError: If the source object does not exist
             PresignError: If required parameters are missing or request fails
 
         Reference:
@@ -481,6 +482,7 @@ class Client(_BaseClient):
                 - ResponseMetadata: Response metadata with HTTPStatusCode and HTTPHeaders
 
         Raises:
+            NoSuchBucketError: If the bucket does not exist
             PresignError: If required parameters are missing or request fails
 
         Reference:
