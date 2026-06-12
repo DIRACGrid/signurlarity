@@ -373,6 +373,45 @@ def test_copy_object_dict_source(s3_clients):
     boto_client.head_object(Bucket=BUCKET_NAME, Key=dst_key)
 
 
+@pytest.mark.parametrize(
+    "src_key",
+    [
+        "copy source with space.txt",
+        "plus+source.txt",
+        "question?source.txt",
+        "hash#source.txt",
+        "percent%source.txt",
+    ],
+)
+def test_copy_object_special_chars_source(s3_clients, src_key):
+    """copy_object must percent-encode the x-amz-copy-source header value.
+
+    The AWS CopyObject spec requires the copy source ("bucket/key") to be
+    URL-encoded. Without encoding, source keys containing characters such as
+    spaces, '+', '?', '#' or '%' are mis-parsed by the server (for example
+    '?' is read as the start of the '?versionId=' query), so the copy either
+    fails or silently targets the wrong object.
+    """
+    boto_client, light_client = s3_clients
+
+    file_content = f"copy-source payload for {src_key}".encode()
+    slug = "".join(c if c.isalnum() else "-" for c in src_key)
+    dst_key = f"copy-special-dst-{slug}.txt"
+
+    boto_client.put_object(Body=file_content, Bucket=BUCKET_NAME, Key=src_key)
+    # Sanity: the source key is legal and present on the backend.
+    boto_client.head_object(Bucket=BUCKET_NAME, Key=src_key)
+
+    light_client.copy_object(
+        Bucket=BUCKET_NAME,
+        Key=dst_key,
+        CopySource=f"{BUCKET_NAME}/{src_key}",
+    )
+
+    got = boto_client.get_object(Bucket=BUCKET_NAME, Key=dst_key)["Body"].read()
+    assert got == file_content
+
+
 def test_copy_object_missing_bucket(s3_clients):
     """Test that copy_object raises PresignError when Bucket is missing."""
     from signurlarity.exceptions import PresignError
