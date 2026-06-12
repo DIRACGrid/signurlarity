@@ -15,6 +15,7 @@ from .exceptions import (
     BucketAlreadyExistsError,
     BucketAlreadyOwnedByYouError,
     NoSuchBucketError,
+    NoSuchKeyError,
     PresignError,
 )
 from .presigner import S3Presigner
@@ -304,7 +305,7 @@ class _BaseClient:
     ) -> dict[str, Any]:
         """Parse HEAD object response, raising on errors."""
         if response.status_code == 404:
-            raise PresignError(
+            raise NoSuchKeyError(
                 f"Object '{Key}' in bucket '{Bucket}' does not exist or is not accessible"
             )
         elif response.status_code == 403:
@@ -466,7 +467,7 @@ class _BaseClient:
     ) -> dict[str, Any]:
         """Parse copy-object response, raising on errors."""
         if response.status_code == 404:
-            raise PresignError(
+            raise NoSuchKeyError(
                 f"Source or destination not found for copy to '{Bucket}/{Key}'"
             )
         elif response.status_code == 403:
@@ -664,7 +665,9 @@ class _BaseClient:
     ) -> dict[str, Any]:
         """Parse PUT object response, raising on errors."""
         if response.status_code == 404:
-            raise PresignError(f"Bucket '{Bucket}' does not exist or is not accessible")
+            raise NoSuchBucketError(
+                f"Bucket '{Bucket}' does not exist or is not accessible"
+            )
         elif response.status_code == 403:
             raise PresignError(
                 f"Access denied to bucket '{Bucket}'. Check credentials and permissions."

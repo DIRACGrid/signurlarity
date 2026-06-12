@@ -128,11 +128,11 @@ async def test_head_object_special_chars_aio(s3_clients_aio, key):
 
 @pytest.mark.asyncio
 async def test_head_object_not_found_aio(s3_clients_aio):
-    """Test that head_object raises PresignError for non-existent object."""
+    """Test that head_object raises NoSuchKeyError for non-existent object."""
     _boto_client, async_light_client = s3_clients_aio
-    from signurlarity.exceptions import PresignError
+    from signurlarity.exceptions import NoSuchKeyError
 
-    with pytest.raises(PresignError):
+    with pytest.raises(NoSuchKeyError):
         await async_light_client.head_object(
             Bucket=BUCKET_NAME, Key="nonexistent_key.txt"
         )
@@ -291,6 +291,37 @@ async def test_put_object_missing_key_aio(s3_clients_aio):
         await async_light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
 
 
+# SeaweedFS accepts a PUT to a missing bucket (auto-creates it) instead of
+# returning 404, so it never raises NoSuchBucketError.
+@pytest.mark.parametrize(
+    "s3_clients_aio",
+    [
+        "minio_server",
+        "moto_server",
+        "rustfs_server",
+        pytest.param(
+            "seaweedfs_server",
+            marks=pytest.mark.xfail(
+                reason="SeaweedFS auto-creates the bucket on PUT instead of "
+                "returning 404 NoSuchBucket",
+                strict=True,
+            ),
+        ),
+    ],
+    indirect=True,
+)
+@pytest.mark.asyncio
+async def test_put_object_bucket_not_found_aio(s3_clients_aio):
+    """Test that put_object raises NoSuchBucketError for a missing bucket (async)."""
+    from signurlarity.exceptions import NoSuchBucketError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(NoSuchBucketError):
+        await async_light_client.put_object(
+            Bucket=MISSING_BUCKET_NAME, Key="key.txt", Body=b"data"
+        )
+
+
 @pytest.mark.asyncio
 async def test_list_objects_empty_aio(s3_clients_aio):
     """Test list_objects on a bucket with no matching prefix (async)."""
@@ -425,6 +456,39 @@ async def test_copy_object_missing_copy_source_aio(s3_clients_aio):
     with pytest.raises(PresignError):
         await async_light_client.copy_object(
             Bucket=BUCKET_NAME, Key="dst.txt", CopySource=""
+        )
+
+
+# SeaweedFS returns 400 InvalidArgument when the copy source object cannot be
+# resolved, rather than the 404 NoSuchKey returned by AWS/moto/minio/rustfs.
+@pytest.mark.parametrize(
+    "s3_clients_aio",
+    [
+        "minio_server",
+        "moto_server",
+        "rustfs_server",
+        pytest.param(
+            "seaweedfs_server",
+            marks=pytest.mark.xfail(
+                reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
+                "source instead of 404 NoSuchKey",
+                strict=True,
+            ),
+        ),
+    ],
+    indirect=True,
+)
+@pytest.mark.asyncio
+async def test_copy_object_source_not_found_aio(s3_clients_aio):
+    """Test that copy_object raises NoSuchKeyError when the source is missing (async)."""
+    from signurlarity.exceptions import NoSuchKeyError
+
+    _boto_client, async_light_client = s3_clients_aio
+    with pytest.raises(NoSuchKeyError):
+        await async_light_client.copy_object(
+            Bucket=BUCKET_NAME,
+            Key="copy-dst-missing-src.txt",
+            CopySource=f"{BUCKET_NAME}/nonexistent-source-key.txt",
         )
 
 
