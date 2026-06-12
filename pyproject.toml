@@ -52,6 +52,9 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+  "moto: tests that only run against the moto server backend",
+]
 
 
 [tool.ruff]
