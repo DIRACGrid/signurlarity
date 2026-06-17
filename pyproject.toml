@@ -54,6 +54,8 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
   "moto: tests that only run against the moto server backend",
+  "backend_only: restrict a test to the named S3 backend server fixture(s)",
+  "xfail_backend: strict xfail a test on the named S3 backend server fixture(s)",
 ]
 
 

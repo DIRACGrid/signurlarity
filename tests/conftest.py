@@ -27,6 +27,9 @@ OTHER_BUCKET_NAME = "other-bucket"
 MISSING_BUCKET_NAME = "missing-bucket"
 INVALID_BUCKET_NAME = ".."
 
+# Server backend fixtures the shared client fixtures fan out across.
+S3_BACKENDS = ("minio_server", "moto_server", "rustfs_server", "seaweedfs_server")
+
 CHECKSUM_ALGORITHM = "sha256"
 
 rng = random.Random(1234)  # noqa: S311
@@ -296,7 +299,7 @@ def seaweedfs_server():
 # Synchronous client fixtures
 @pytest.fixture(
     scope="function",
-    params=["minio_server", "moto_server", "rustfs_server", "seaweedfs_server"],
+    params=list(S3_BACKENDS),
 )
 def s3_clients(request):
     """S3 clients for synchronous tests with multiple server backends.
@@ -323,7 +326,7 @@ def s3_clients(request):
 # Asynchronous client fixtures
 @pytest.fixture(
     scope="function",
-    params=["minio_server", "moto_server", "rustfs_server", "seaweedfs_server"],
+    params=list(S3_BACKENDS),
 )
 async def s3_clients_aio(request):
     """S3 clients for asynchronous tests with multiple server backends.
@@ -352,3 +355,49 @@ async def s3_clients_aio(request):
 
         yield boto_client, async_light_client
         await async_light_client.close()
+
+
+def _active_backend(request):
+    """Return the backend server fixture name for the current parametrization.
+
+    ``None`` if the test is not fanned out across the S3 backends.
+    """
+    callspec = getattr(request.node, "callspec", None)
+    if callspec is None:
+        return None
+    for value in callspec.params.values():
+        if value in S3_BACKENDS:
+            return value
+    return None
+
+
+@pytest.fixture(autouse=True)
+def _apply_backend_constraints(request):
+    """Apply per-backend skip/xfail declared via markers.
+
+    The shared ``s3_clients`` / ``s3_clients_aio`` fixtures fan every test out
+    across all server backends. A few behaviours differ per backend, so tests
+    declare the difference with a marker instead of re-parametrizing the fixture
+    (which pytest forbids when the fixture already defines ``params``):
+
+      * ``@pytest.mark.backend_only("moto_server")`` -- skip every other backend.
+      * ``@pytest.mark.xfail_backend("seaweedfs_server", reason=...)`` -- strict
+        xfail on the named backend(s).
+
+    Being autouse, this runs before ``s3_clients`` during setup, so a skip avoids
+    starting an unused server and an xfail marker lands before the call phase
+    evaluates it. Works for sync and async tests alike.
+    """
+    backend = _active_backend(request)
+    if backend is None:
+        return
+
+    only = request.node.get_closest_marker("backend_only")
+    if only and backend not in only.args:
+        pytest.skip(f"only runs against: {', '.join(only.args)}")
+
+    for marker in request.node.iter_markers("xfail_backend"):
+        if backend in marker.args:
+            request.node.add_marker(
+                pytest.mark.xfail(reason=marker.kwargs.get("reason"), strict=True)
+            )
