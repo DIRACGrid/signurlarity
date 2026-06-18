@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -84,3 +85,26 @@ async def _timeit_async_helper(fn, iterations: int) -> float:
     start = time.perf_counter()
     await fn(iterations)
     return time.perf_counter() - start
+
+
+def _write_benchmark_results(
+    result_file: Path,
+    py_vers,
+    tested_method: str,
+    iterations: int,
+    t_boto: float,
+    t_custom: float,
+) -> dict[str, float | int | str]:
+    """Build and persist common benchmark result payloads."""
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": tested_method,
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+    result_file.write_text(json.dumps(results, indent=2))
+    return results
