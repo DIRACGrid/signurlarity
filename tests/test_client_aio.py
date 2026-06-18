@@ -508,7 +508,6 @@ async def test_upload_file_with_extra_args_aio(s3_clients_aio, tmp_path):
     assert head["ContentLength"] == len(content)
 
 
-@pytest.mark.moto
 @pytest.mark.backend_only("moto_server")
 @pytest.mark.asyncio
 async def test_upload_file_with_acl_extra_args_aio(s3_clients_aio, tmp_path):

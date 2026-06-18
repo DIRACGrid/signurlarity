@@ -468,7 +468,6 @@ def test_upload_file_with_extra_args(s3_clients, tmp_path):
 
 
 # Only Moto exposes the correct ACL api
-@pytest.mark.moto
 @pytest.mark.backend_only("moto_server")
 def test_upload_file_with_acl_extra_args(s3_clients, tmp_path):
     """Test that upload_file applies ACL from ExtraArgs (moto only)."""
