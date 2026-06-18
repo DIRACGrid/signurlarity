@@ -291,24 +291,10 @@ async def test_put_object_missing_key_aio(s3_clients_aio):
         await async_light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
 
 
-# SeaweedFS accepts a PUT to a missing bucket (auto-creates it) instead of
-# returning 404, so it never raises NoSuchBucketError.
-@pytest.mark.parametrize(
-    "s3_clients_aio",
-    [
-        "minio_server",
-        "moto_server",
-        "rustfs_server",
-        pytest.param(
-            "seaweedfs_server",
-            marks=pytest.mark.xfail(
-                reason="SeaweedFS auto-creates the bucket on PUT instead of "
-                "returning 404 NoSuchBucket",
-                strict=True,
-            ),
-        ),
-    ],
-    indirect=True,
+@pytest.mark.xfail_backend(
+    "seaweedfs_server",
+    reason="SeaweedFS auto-creates the bucket on PUT instead of "
+    "returning 404 NoSuchBucket",
 )
 @pytest.mark.asyncio
 async def test_put_object_bucket_not_found_aio(s3_clients_aio):
@@ -459,24 +445,10 @@ async def test_copy_object_missing_copy_source_aio(s3_clients_aio):
         )
 
 
-# SeaweedFS returns 400 InvalidArgument when the copy source object cannot be
-# resolved, rather than the 404 NoSuchKey returned by AWS/moto/minio/rustfs.
-@pytest.mark.parametrize(
-    "s3_clients_aio",
-    [
-        "minio_server",
-        "moto_server",
-        "rustfs_server",
-        pytest.param(
-            "seaweedfs_server",
-            marks=pytest.mark.xfail(
-                reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
-                "source instead of 404 NoSuchKey",
-                strict=True,
-            ),
-        ),
-    ],
-    indirect=True,
+@pytest.mark.xfail_backend(
+    "seaweedfs_server",
+    reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
+    "source instead of 404 NoSuchKey",
 )
 @pytest.mark.asyncio
 async def test_copy_object_source_not_found_aio(s3_clients_aio):
@@ -536,12 +508,8 @@ async def test_upload_file_with_extra_args_aio(s3_clients_aio, tmp_path):
     assert head["ContentLength"] == len(content)
 
 
+@pytest.mark.backend_only("moto_server")
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "s3_clients_aio",
-    [pytest.param("moto_server", marks=pytest.mark.moto)],
-    indirect=True,
-)
 async def test_upload_file_with_acl_extra_args_aio(s3_clients_aio, tmp_path):
     """Test that upload_file applies ACL from ExtraArgs (moto only)."""
     boto_client, async_light_client = s3_clients_aio

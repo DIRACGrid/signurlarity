@@ -52,6 +52,10 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+  "backend_only: restrict a test to the named S3 backend server fixture(s)",
+  "xfail_backend: strict xfail a test on the named S3 backend server fixture(s)",
+]
 
 
 [tool.ruff]

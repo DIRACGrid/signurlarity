@@ -10,6 +10,8 @@ import random
 import signal
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from tempfile import TemporaryDirectory
 
 import boto3
@@ -26,6 +28,9 @@ BUCKET_NAME = "test-bucket"
 OTHER_BUCKET_NAME = "other-bucket"
 MISSING_BUCKET_NAME = "missing-bucket"
 INVALID_BUCKET_NAME = ".."
+
+# Server backend fixtures the shared client fixtures fan out across.
+S3_BACKENDS = ("minio_server", "moto_server", "rustfs_server", "seaweedfs_server")
 
 CHECKSUM_ALGORITHM = "sha256"
 
@@ -142,60 +147,56 @@ def minio_server():
     subprocess.run(cmd, check=True)  # noqa: S603
 
 
+def _wait_for_seaweedfs_writable(
+    master: str = "localhost:9333", timeout: float = 120, poll_interval: float = 1.0
+) -> None:
+    """Block until the SeaweedFS master can assign a writable volume.
+
+    SeaweedFS creates volumes lazily, so the S3 gateway rejects the first writes
+    until a volume has been grown. A successful ``/dir/assign`` (one that returns
+    a ``fid``) both triggers and confirms volume readiness -- the same operation
+    ``weed upload`` performs internally, but as a single cheap HTTP call with no
+    dependency on the ``weed`` CLI or its output format.
+    """
+    url = f"http://{master}/dir/assign"
+    deadline = time.monotonic() + timeout
+    last_status = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as response:  # noqa: S310
+                payload = json.load(response)
+        except urllib.error.HTTPError as exc:
+            # Assignment errors (e.g. "No free volumes left!") arrive as non-2xx.
+            try:
+                payload = json.load(exc)
+            except ValueError:
+                payload = {"error": f"HTTP {exc.code}"}
+        except (urllib.error.URLError, OSError) as exc:
+            # Master not accepting connections yet.
+            last_status = exc
+            time.sleep(poll_interval)
+            continue
+
+        if payload.get("fid"):
+            return
+        last_status = payload.get("error", payload)
+        time.sleep(poll_interval)
+
+    raise RuntimeError(
+        f"SeaweedFS master at {master} did not provide a writable volume "
+        f"within {timeout:.0f}s (last response: {last_status})"
+    )
+
+
 @pytest.fixture(scope="module")
 def seaweedfs_server():
     """Run a SeaweedFS server with S3 API enabled.
 
-    Because it creates volumes on the fly, we have to upload a file
-    and wait for the initialization to be over, otherwise all the tests
-    fail.
+    Because it creates volumes on the fly, we wait until the master can assign a
+    writable volume before yielding, otherwise the first writes fail.
     """
     AWS_ACCESS_KEY_ID = "admin"
     AWS_SECRET_ACCESS_KEY = "key"  # noqa: S105
-
-    def check_volume_status(max_retries=10, retry_delay=5):
-        cmd = ["weed", "shell"]
-        # Use echo to send the command to weed shell
-        input_cmd = "cluster.status\n"
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                process = subprocess.Popen(  # noqa: S603
-                    cmd,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-                stdout, _stderr = process.communicate(input=input_cmd, timeout=15)
-
-                # Check if "7 volume" is in the output
-                if "7 volume" in stdout:
-                    print("Found '7 volume' in output!")
-                    return
-
-                print(
-                    f"'7 volume' not found (attempt {attempt}/{max_retries}), "
-                    f"retrying in {retry_delay} seconds..."
-                )
-            except subprocess.TimeoutExpired:
-                process.kill()
-                stdout, _stderr = process.communicate()
-                print(
-                    f"weed shell timed out (attempt {attempt}/{max_retries}), "
-                    f"retrying in {retry_delay} seconds..."
-                )
-            except Exception as exc:
-                print(
-                    f"Error checking volume status (attempt {attempt}/{max_retries}): {exc}"
-                )
-
-            if attempt < max_retries:
-                time.sleep(retry_delay)
-
-        raise RuntimeError(
-            f"SeaweedFS did not report '7 volume' after {max_retries} attempts"
-        )
 
     with TemporaryDirectory() as tmp_dir:
         os.mkdir(f"{tmp_dir}/seaweedfs")
@@ -238,34 +239,8 @@ def seaweedfs_server():
 
                 pid = process.pid
                 print(f"Process PID: {pid} Working Directory {tmp_dir}")
-                upload_cmd = [
-                    "weed",
-                    "upload",
-                    "-master",
-                    "localhost:9333",
-                    f"{tmp_dir}/seaweedfs.log",
-                ]
-                max_retries = 10
-                retry_delay = 5
 
-                for attempt in range(1, max_retries + 1):
-                    try:
-                        subprocess.run(  # noqa: S603
-                            upload_cmd, check=True, capture_output=True, text=True
-                        )
-                        print("Upload successful!")
-                        break
-                    except subprocess.CalledProcessError as e:
-                        if attempt >= max_retries:
-                            raise RuntimeError(
-                                f"Upload failed after {max_retries} attempts: {e.stderr}"
-                            ) from e
-                        print(
-                            f"Upload failed (attempt {attempt}/{max_retries}), "
-                            f"retrying in {retry_delay} seconds... (Error: {e.stderr})"
-                        )
-                        time.sleep(retry_delay)
-                check_volume_status()
+                _wait_for_seaweedfs_writable()
 
                 yield {
                     "endpoint_url": "http://localhost:8333",
@@ -296,7 +271,7 @@ def seaweedfs_server():
 # Synchronous client fixtures
 @pytest.fixture(
     scope="function",
-    params=["minio_server", "moto_server", "rustfs_server", "seaweedfs_server"],
+    params=list(S3_BACKENDS),
 )
 def s3_clients(request):
     """S3 clients for synchronous tests with multiple server backends.
@@ -323,7 +298,7 @@ def s3_clients(request):
 # Asynchronous client fixtures
 @pytest.fixture(
     scope="function",
-    params=["minio_server", "moto_server", "rustfs_server", "seaweedfs_server"],
+    params=list(S3_BACKENDS),
 )
 async def s3_clients_aio(request):
     """S3 clients for asynchronous tests with multiple server backends.
@@ -352,3 +327,49 @@ async def s3_clients_aio(request):
 
         yield boto_client, async_light_client
         await async_light_client.close()
+
+
+def _active_backend(request):
+    """Return the backend server fixture name for the current parametrization.
+
+    ``None`` if the test is not fanned out across the S3 backends.
+    """
+    callspec = getattr(request.node, "callspec", None)
+    if callspec is None:
+        return None
+    for value in callspec.params.values():
+        if value in S3_BACKENDS:
+            return value
+    return None
+
+
+@pytest.fixture(autouse=True)
+def _apply_backend_constraints(request):
+    """Apply per-backend skip/xfail declared via markers.
+
+    The shared ``s3_clients`` / ``s3_clients_aio`` fixtures fan every test out
+    across all server backends. A few behaviours differ per backend, so tests
+    declare the difference with a marker instead of re-parametrizing the fixture
+    (which pytest forbids when the fixture already defines ``params``):
+
+      * ``@pytest.mark.backend_only("moto_server")`` -- skip every other backend.
+      * ``@pytest.mark.xfail_backend("seaweedfs_server", reason=...)`` -- strict
+        xfail on the named backend(s).
+
+    Being autouse, this runs before ``s3_clients`` during setup, so a skip avoids
+    starting an unused server and an xfail marker lands before the call phase
+    evaluates it. Works for sync and async tests alike.
+    """
+    backend = _active_backend(request)
+    if backend is None:
+        return
+
+    only = request.node.get_closest_marker("backend_only")
+    if only and backend not in only.args:
+        pytest.skip(f"only runs against: {', '.join(only.args)}")
+
+    for marker in request.node.iter_markers("xfail_backend"):
+        if backend in marker.args:
+            request.node.add_marker(
+                pytest.mark.xfail(reason=marker.kwargs.get("reason"), strict=True)
+            )

@@ -269,24 +269,10 @@ def test_put_object_missing_key(s3_clients):
         light_client.put_object(Bucket=BUCKET_NAME, Key="", Body=b"data")
 
 
-# SeaweedFS accepts a PUT to a missing bucket (auto-creates it) instead of
-# returning 404, so it never raises NoSuchBucketError.
-@pytest.mark.parametrize(
-    "s3_clients",
-    [
-        "minio_server",
-        "moto_server",
-        "rustfs_server",
-        pytest.param(
-            "seaweedfs_server",
-            marks=pytest.mark.xfail(
-                reason="SeaweedFS auto-creates the bucket on PUT instead of "
-                "returning 404 NoSuchBucket",
-                strict=True,
-            ),
-        ),
-    ],
-    indirect=True,
+@pytest.mark.xfail_backend(
+    "seaweedfs_server",
+    reason="SeaweedFS auto-creates the bucket on PUT instead of "
+    "returning 404 NoSuchBucket",
 )
 def test_put_object_bucket_not_found(s3_clients):
     """Test that put_object raises NoSuchBucketError for a missing bucket."""
@@ -421,24 +407,10 @@ def test_copy_object_missing_copy_source(s3_clients):
         light_client.copy_object(Bucket=BUCKET_NAME, Key="dst.txt", CopySource="")
 
 
-# SeaweedFS returns 400 InvalidArgument when the copy source object cannot be
-# resolved, rather than the 404 NoSuchKey returned by AWS/moto/minio/rustfs.
-@pytest.mark.parametrize(
-    "s3_clients",
-    [
-        "minio_server",
-        "moto_server",
-        "rustfs_server",
-        pytest.param(
-            "seaweedfs_server",
-            marks=pytest.mark.xfail(
-                reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
-                "source instead of 404 NoSuchKey",
-                strict=True,
-            ),
-        ),
-    ],
-    indirect=True,
+@pytest.mark.xfail_backend(
+    "seaweedfs_server",
+    reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
+    "source instead of 404 NoSuchKey",
 )
 def test_copy_object_source_not_found(s3_clients):
     """Test that copy_object raises NoSuchKeyError when the source is missing."""
@@ -496,11 +468,7 @@ def test_upload_file_with_extra_args(s3_clients, tmp_path):
 
 
 # Only Moto exposes the correct ACL api
-@pytest.mark.parametrize(
-    "s3_clients",
-    [pytest.param("moto_server", marks=pytest.mark.moto)],
-    indirect=True,
-)
+@pytest.mark.backend_only("moto_server")
 def test_upload_file_with_acl_extra_args(s3_clients, tmp_path):
     """Test that upload_file applies ACL from ExtraArgs (moto only)."""
     boto_client, light_client = s3_clients
