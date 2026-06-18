@@ -443,7 +443,19 @@ class _BaseClient:
             copy_source_str = CopySource
 
         base_url, path, headers = self._build_request_url(Bucket, Key)
-        headers["x-amz-copy-source"] = copy_source_str
+        # The x-amz-copy-source value must be URL-encoded (AWS CopyObject spec).
+        # Encode the "bucket/key" path while preserving an optional
+        # "?versionId=..." suffix, mirroring botocore's _quote_source_header.
+        version_marker = "?versionId="
+        marker_idx = copy_source_str.find(version_marker)
+        if marker_idx == -1:
+            source_path, version_suffix = copy_source_str, ""
+        else:
+            source_path = copy_source_str[:marker_idx]
+            version_suffix = copy_source_str[marker_idx:]
+        headers["x-amz-copy-source"] = (
+            self._presigner._uri_encode_path(source_path) + version_suffix
+        )
 
         if "MetadataDirective" in kwargs:
             headers["x-amz-metadata-directive"] = kwargs["MetadataDirective"]
