@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.1](https://github.com/DIRACGrid/signurlarity/compare/v0.3.0...v0.3.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* percent-encode object keys in header-signed request paths ([#39](https://github.com/DIRACGrid/signurlarity/issues/39)) ([c8fc80c](https://github.com/DIRACGrid/signurlarity/commit/c8fc80c546902373476867cba6ec58dd43286e9b))
+* percent-encode the x-amz-copy-source header value ([#43](https://github.com/DIRACGrid/signurlarity/issues/43)) ([4c537aa](https://github.com/DIRACGrid/signurlarity/commit/4c537aa8739e49c4e043dbe1ef8efe7360d45d12))
+* raise NoSuchKeyError on 404 for object operations ([#42](https://github.com/DIRACGrid/signurlarity/issues/42)) ([2536dbc](https://github.com/DIRACGrid/signurlarity/commit/2536dbc3e2e2b182f7479b048585eecd2b3d1eba))
+
 ## [0.3.0](https://github.com/DIRACGrid/signurlarity/compare/v0.2.2...v0.3.0) (2026-05-29)
 
 
