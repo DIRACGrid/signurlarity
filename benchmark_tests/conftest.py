@@ -58,6 +58,17 @@ def rustfs_server():
     subprocess.run(cmd, check=True)  # noqa: S603
 
 
+def _benchmark_result_path(test_results_dir: Path, benchmark_name: str) -> Path:
+    """Return the JSON result path for a benchmark test."""
+    import os
+    import sys
+
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path(benchmark_name)
+    os.makedirs(test_dir, exist_ok=True)
+    return test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+
 def _timeit(fn, iterations: int) -> float:
     """Measure execution time of a function."""
     import time
