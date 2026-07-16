@@ -26,8 +26,8 @@ class AsyncClient(_BaseClient):
                      - Custom S3-compatible services
         aws_access_key_id: AWS access key ID for authentication
         aws_secret_access_key: AWS secret access key for authentication
-        httpx_max_connections: Optional maximum number of connections in the pool.
-                              If not specified, uses httpx2 default limits.
+        max_connections: Optional maximum number of connections in the pool.
+                         If not specified, uses httpx2 default limits.
 
     Example:
         >>> # Basic async usage with explicit cleanup
@@ -97,13 +97,13 @@ class AsyncClient(_BaseClient):
         endpoint_url: str,
         aws_access_key_id: str,
         aws_secret_access_key: str,
-        httpx_max_connections: int | None = None,
+        max_connections: int | None = None,
     ):
         super().__init__(
             endpoint_url=endpoint_url,
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
-            httpx_max_connections=httpx_max_connections,
+            max_connections=max_connections,
         )
         self._http_client = httpx2.AsyncClient(limits=self._limits)
 
