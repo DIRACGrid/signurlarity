@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import tempfile
 
-import httpx
+import httpx2
 import pytest
 from botocore.errorfactory import ClientError
 
@@ -162,7 +162,7 @@ async def test_head_object_missing_bucket_param_aio(s3_clients_aio):
 async def test_generate_presigned_post_aio(s3_clients_aio):
     """Upload files using post presigned URLs with async client.
 
-    Get a pre-signed URL with our async client, upload with httpx
+    Get a pre-signed URL with our async client, upload with httpx2
     check it exists with boto.
     """
     boto_client, async_light_client = s3_clients_aio
@@ -187,7 +187,7 @@ async def test_generate_presigned_post_aio(s3_clients_aio):
         ExpiresIn=60,
     )
 
-    with httpx.Client() as client:
+    with httpx2.Client() as client:
         r = client.post(
             upload_info["url"],
             data=upload_info["fields"],
@@ -200,8 +200,8 @@ async def test_generate_presigned_post_aio(s3_clients_aio):
 
 @pytest.mark.asyncio
 async def test_generate_presigned_url_aio(s3_clients_aio, caplog):
-    """Get a pre-signed URL with our async client, upload with httpx, check it exists with boto."""
-    caplog.set_level(logging.DEBUG, logger="httpx")
+    """Get a pre-signed URL with our async client, upload with httpx2, check it exists with boto."""
+    caplog.set_level(logging.DEBUG, logger="httpx2")
     caplog.set_level(logging.DEBUG, logger="httpcore")
 
     boto_client, async_light_client = s3_clients_aio
@@ -220,7 +220,7 @@ async def test_generate_presigned_url_aio(s3_clients_aio, caplog):
     )
 
     with tempfile.TemporaryFile(mode="w+b") as fh:
-        with httpx.Client() as http_client:
+        with httpx2.Client() as http_client:
             response = http_client.get(presigned_url)
             response.raise_for_status()
             for chunk in response.iter_bytes():

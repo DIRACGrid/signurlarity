@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 
 from .._base import _BaseClient
 from ..exceptions import PresignError
@@ -17,7 +17,7 @@ class AsyncClient(_BaseClient):
 
     This is a lightweight, boto3-compatible async client that focuses on presigned URL
     generation and basic S3 operations without the boto3 dependency overhead.
-    Uses async connection pooling via httpx for better performance in async applications.
+    Uses async connection pooling via httpx2 for better performance in async applications.
 
     Args:
         endpoint_url: S3 endpoint URL. Examples:
@@ -27,7 +27,7 @@ class AsyncClient(_BaseClient):
         aws_access_key_id: AWS access key ID for authentication
         aws_secret_access_key: AWS secret access key for authentication
         httpx_max_connections: Optional maximum number of connections in the pool.
-                              If not specified, uses httpx default limits.
+                              If not specified, uses httpx2 default limits.
 
     Example:
         >>> # Basic async usage with explicit cleanup
@@ -84,7 +84,7 @@ class AsyncClient(_BaseClient):
         ...     )
 
     Note:
-        This client uses async connection pooling via httpx.AsyncClient() for better
+        This client uses async connection pooling via httpx2.AsyncClient() for better
         performance in async applications. The same HTTP client instance is reused
         across multiple requests, reducing connection overhead and enabling HTTP/2 benefits.
         Always use the async context manager or call await close() to properly clean up
@@ -105,11 +105,11 @@ class AsyncClient(_BaseClient):
             aws_secret_access_key=aws_secret_access_key,
             httpx_max_connections=httpx_max_connections,
         )
-        self._http_client = httpx.AsyncClient(limits=self._limits)
+        self._http_client = httpx2.AsyncClient(limits=self._limits)
 
     async def _execute_request(
         self, method: str, url: str, headers: dict[str, str], body: bytes = b""
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Execute an HTTP request using async connection pooling.
 
         Args:
@@ -119,7 +119,7 @@ class AsyncClient(_BaseClient):
             body: Request body (for PUT/POST)
 
         Returns:
-            httpx.Response object
+            httpx2.Response object
 
         Raises:
             PresignError: If request execution fails
@@ -138,7 +138,7 @@ class AsyncClient(_BaseClient):
                 return await self._http_client.post(url, headers=headers, content=body)
             else:
                 raise PresignError(f"Unsupported HTTP method: {method}")
-        except httpx.HTTPError as e:
+        except httpx2.HTTPError as e:
             raise PresignError(f"Failed to execute {method} request: {str(e)}") from e
         except Exception as e:
             raise PresignError(f"Failed to execute {method} request: {str(e)}") from e

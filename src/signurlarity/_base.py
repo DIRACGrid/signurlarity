@@ -9,7 +9,7 @@ from urllib.parse import urlencode, urlparse
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape as xml_escape
 
-import httpx
+import httpx2
 
 from .exceptions import (
     BucketAlreadyExistsError,
@@ -52,7 +52,7 @@ class _BaseClient:
         )
 
         # Build connection pool limits for subclasses
-        self._limits = httpx._config.DEFAULT_LIMITS
+        self._limits = httpx2._config.DEFAULT_LIMITS
         if httpx_max_connections:
             self._limits.max_connections = httpx_max_connections
 
@@ -240,7 +240,7 @@ class _BaseClient:
         return url, signed_headers
 
     def _parse_head_bucket_response(
-        self, response: httpx.Response, Bucket: str
+        self, response: httpx2.Response, Bucket: str
     ) -> dict[str, Any]:
         """Parse HEAD bucket response, raising on errors."""
         if response.status_code == 404:
@@ -301,7 +301,7 @@ class _BaseClient:
         return url, signed_headers
 
     def _parse_head_object_response(
-        self, response: httpx.Response, Bucket: str, Key: str
+        self, response: httpx2.Response, Bucket: str, Key: str
     ) -> dict[str, Any]:
         """Parse HEAD object response, raising on errors."""
         if response.status_code == 404:
@@ -382,7 +382,7 @@ class _BaseClient:
         return url, signed_headers, body
 
     def _parse_create_bucket_response(
-        self, response: httpx.Response, Bucket: str
+        self, response: httpx2.Response, Bucket: str
     ) -> dict[str, Any]:
         """Parse PUT bucket response, raising on errors."""
         if response.status_code == 409:
@@ -475,7 +475,7 @@ class _BaseClient:
         return url, signed_headers
 
     def _parse_copy_object_response(
-        self, response: httpx.Response, Bucket: str, Key: str
+        self, response: httpx2.Response, Bucket: str, Key: str
     ) -> dict[str, Any]:
         """Parse copy-object response, raising on errors."""
         if response.status_code == 404:
@@ -559,7 +559,7 @@ class _BaseClient:
         return url, signed_headers
 
     def _parse_list_objects_response(
-        self, response: httpx.Response, Bucket: str
+        self, response: httpx2.Response, Bucket: str
     ) -> dict[str, Any]:
         """Parse list-objects response, raising on errors."""
         if response.status_code == 404:
@@ -673,7 +673,7 @@ class _BaseClient:
         return url, signed_headers, body
 
     def _parse_put_object_response(
-        self, response: httpx.Response, Bucket: str, Key: str
+        self, response: httpx2.Response, Bucket: str, Key: str
     ) -> dict[str, Any]:
         """Parse PUT object response, raising on errors."""
         if response.status_code == 404:
@@ -758,7 +758,7 @@ class _BaseClient:
         return url, signed_headers, body
 
     def _parse_delete_objects_response(
-        self, response: httpx.Response, Bucket: str
+        self, response: httpx2.Response, Bucket: str
     ) -> dict[str, Any]:
         """Parse multi-object delete response, raising on errors."""
         if response.status_code == 404:
@@ -855,7 +855,7 @@ class _BaseClient:
 
     def _parse_delete_bucket_response(
         self,
-        response: httpx.Response,
+        response: httpx2.Response,
         Bucket: str,
     ) -> dict[str, Any]:
         """Parse delete bucket response, raising on errors."""

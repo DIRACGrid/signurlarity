@@ -4,7 +4,7 @@ import logging
 import tempfile
 
 import botocore
-import httpx
+import httpx2
 import pytest
 
 from signurlarity.exceptions import NoSuchBucketError
@@ -145,7 +145,7 @@ def test_head_object_missing_bucket_param(s3_clients):
 def test_generate_presigned_post(s3_clients):
     """Upload files using post presigned URLs.
 
-    Get a pre-signed URL with our client, upload with httpx
+    Get a pre-signed URL with our client, upload with httpx2
     check it exists with boto.
     """
     boto_client, light_client = s3_clients
@@ -170,7 +170,7 @@ def test_generate_presigned_post(s3_clients):
         ExpiresIn=60,
     )
 
-    with httpx.Client() as client:
+    with httpx2.Client() as client:
         r = client.post(
             upload_info["url"],
             data=upload_info["fields"],
@@ -182,8 +182,8 @@ def test_generate_presigned_post(s3_clients):
 
 
 def test_generate_presigned_url(s3_clients, caplog):
-    """Get a pre-signed URL with our client, upload with httpx, check it exists with boto."""
-    caplog.set_level(logging.DEBUG, logger="httpx")
+    """Get a pre-signed URL with our client, upload with httpx2, check it exists with boto."""
+    caplog.set_level(logging.DEBUG, logger="httpx2")
     caplog.set_level(logging.DEBUG, logger="httpcore")
 
     boto_client, light_client = s3_clients
@@ -202,7 +202,7 @@ def test_generate_presigned_url(s3_clients, caplog):
     )
 
     with tempfile.TemporaryFile(mode="w+b") as fh:
-        with httpx.Client() as http_client:
+        with httpx2.Client() as http_client:
             response = http_client.get(presigned_url)
             response.raise_for_status()
             for chunk in response.iter_bytes():

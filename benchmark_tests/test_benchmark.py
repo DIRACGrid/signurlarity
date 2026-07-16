@@ -320,7 +320,7 @@ def test_create_bucket_perf_sync(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity for create_bucket.
 
     This benchmark compares boto3's create_bucket with the signurlarity
-    implementation that uses httpx with AWS Signature V4.
+    implementation that uses httpx2 with AWS Signature V4.
     """
     py_vers = sys.version_info
     test_dir = test_results_dir / Path("test_create_bucket_perf")
@@ -398,7 +398,7 @@ def test_delete_objects_perf_sync(rustfs_server, test_results_dir):
     """Compare performance of boto3 vs signurlarity for delete_objects.
 
     This benchmark compares boto3's delete_objects with the signurlarity
-    implementation that uses httpx with AWS Signature V4.
+    implementation that uses httpx2 with AWS Signature V4.
     """
     py_vers = sys.version_info
     test_dir = test_results_dir / Path("test_delete_objects_perf")

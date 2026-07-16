@@ -326,9 +326,9 @@ class S3Presigner:
             ...     headers=headers,
             ...     body=b"",
             ... )
-            >>> # Use signed headers with httpx or requests
-            >>> import httpx
-            >>> response = httpx.head(
+            >>> # Use signed headers with httpx2 or requests
+            >>> import httpx2
+            >>> response = httpx2.head(
             ...     "https://mybucket.s3.us-west-2.amazonaws.com/",
             ...     headers=signed_headers,
             ... )
@@ -342,8 +342,8 @@ class S3Presigner:
             ...     headers=headers,
             ...     body=body,
             ... )
-            >>> import httpx
-            >>> response = httpx.put(
+            >>> import httpx2
+            >>> response = httpx2.put(
             ...     "https://mybucket.s3.us-west-2.amazonaws.com/myfile.txt",
             ...     headers=signed_headers,
             ...     content=body,
