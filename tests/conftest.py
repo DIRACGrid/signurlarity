@@ -95,7 +95,7 @@ def rustfs_server():
         "9000:9000",
         "-p",
         "9001:9001",
-        "rustfs/rustfs:1.0.0-alpha.82",  # return to latest when https://github.com/rustfs/rustfs/issues/1773 is fixed
+        "rustfs/rustfs:1.0.0-alpha.82",
         "/data",
     ]
     # print(shlex.join(cmd))

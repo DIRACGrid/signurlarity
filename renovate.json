@@ -7,7 +7,8 @@
   "enabledManagers": [
     "pip_requirements",
     "pep621",
-    "github-actions"
+    "github-actions",
+    "custom.regex"
   ],
   "python": {
     "rangeStrategy": "auto"
@@ -63,6 +64,30 @@
       "matchPackagePatterns": ["pytest.*", "moto", "aiobotocore", "botocore"],
       "groupName": "Testing dependencies",
       "labels": ["dependencies", "testing"]
+    },
+    {
+      "description": "rustfs w/o -glibc",
+      "matchDepNames": ["rustfs/rustfs"],
+      "matchCurrentVersion": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?$/",
+      "allowedVersions": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?$/"
+    },
+    {
+      "description": "rustfs w/ -glibc",
+      "matchDepNames": ["rustfs/rustfs"],
+      "matchCurrentVersion": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?(-glibc)$/",
+      "allowedVersions": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?(-glibc)$/"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/tests/conftest\\.py$/"],
+      "matchStrings": [
+        "rustfs/rustfs:(?<currentValue>[\\w.-]+)"
+      ],
+      "depNameTemplate": "rustfs/rustfs",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
     }
   ]
 }
