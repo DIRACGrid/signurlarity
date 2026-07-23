@@ -184,7 +184,7 @@ def test_generate_presigned_post(s3_clients):
 def test_generate_presigned_url(s3_clients, caplog):
     """Get a pre-signed URL with our client, upload with httpx2, check it exists with boto."""
     caplog.set_level(logging.DEBUG, logger="httpx2")
-    caplog.set_level(logging.DEBUG, logger="httpcore")
+    caplog.set_level(logging.DEBUG, logger="httpcore2")
 
     boto_client, light_client = s3_clients
 

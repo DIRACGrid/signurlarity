@@ -202,7 +202,7 @@ async def test_generate_presigned_post_aio(s3_clients_aio):
 async def test_generate_presigned_url_aio(s3_clients_aio, caplog):
     """Get a pre-signed URL with our async client, upload with httpx2, check it exists with boto."""
     caplog.set_level(logging.DEBUG, logger="httpx2")
-    caplog.set_level(logging.DEBUG, logger="httpcore")
+    caplog.set_level(logging.DEBUG, logger="httpcore2")
 
     boto_client, async_light_client = s3_clients_aio
 
