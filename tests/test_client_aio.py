@@ -486,11 +486,6 @@ async def test_copy_object_missing_copy_source_aio(s3_clients_aio):
         )
 
 
-@pytest.mark.xfail_backend(
-    "seaweedfs_server",
-    reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
-    "source instead of 404 NoSuchKey",
-)
 @pytest.mark.asyncio
 async def test_copy_object_source_not_found_aio(s3_clients_aio):
     """Test that copy_object raises NoSuchKeyError when the source is missing (async)."""

@@ -446,11 +446,6 @@ def test_copy_object_missing_copy_source(s3_clients):
         light_client.copy_object(Bucket=BUCKET_NAME, Key="dst.txt", CopySource="")
 
 
-@pytest.mark.xfail_backend(
-    "seaweedfs_server",
-    reason="SeaweedFS returns 400 InvalidArgument for a missing copy "
-    "source instead of 404 NoSuchKey",
-)
 def test_copy_object_source_not_found(s3_clients):
     """Test that copy_object raises NoSuchKeyError when the source is missing."""
     from signurlarity.exceptions import NoSuchKeyError
