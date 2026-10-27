@@ -678,6 +678,167 @@ def test_delete_bucket_not_empty(s3_clients):
         light_client.delete_bucket(Bucket=BUCKET_NAME)
 
 
+def test_download_file(s3_clients, tmp_path):
+    """Test that download_file downloads an object to a local file and returns metadata."""
+    boto_client, light_client = s3_clients
+
+    # Create a test object in S3
+    file_content = b"test content for download_file"
+    key = "download-test.txt"
+    boto_client.put_object(
+        Body=file_content, Bucket=BUCKET_NAME, Key=key, ContentType="text/plain"
+    )
+
+    # Define local path
+    local_file = tmp_path / "downloaded_test.txt"
+
+    # Download the file and capture metadata
+    metadata = light_client.download_file(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Filename=str(local_file),
+    )
+
+    # Verify the file was downloaded correctly
+    assert local_file.exists()
+    assert local_file.read_bytes() == file_content
+
+    # Verify the returned metadata
+    assert "ContentLength" in metadata
+    assert metadata["ContentLength"] == len(file_content)
+    assert "ETag" in metadata
+    assert "LastModified" in metadata
+    assert "ResponseMetadata" in metadata
+    assert metadata["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert metadata.get("ContentType") == "text/plain"
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "diracAdmin/admin/admin/sha256:abc123.tar.zst",  # Real-world trigger
+        "with space/file.txt",
+        "plus+sign/file.txt",
+        "question?file.txt",
+        "hash#file.txt",
+        "percent%file.txt",
+    ],
+)
+def test_download_file_special_chars_key(s3_clients, tmp_path, key):
+    """Test that download_file works for keys with special characters and returns metadata."""
+    boto_client, light_client = s3_clients
+
+    file_content = b"special chars test content"
+    boto_client.put_object(Body=file_content, Bucket=BUCKET_NAME, Key=key)
+
+    # Sanity: the key is legal on the backend
+    boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+    local_file = tmp_path / f"special_{key.replace('/', '_').replace(':', '_')}.txt"
+    metadata = light_client.download_file(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Filename=str(local_file),
+    )
+
+    assert local_file.exists()
+    assert local_file.read_bytes() == file_content
+    assert metadata["ContentLength"] == len(file_content)
+
+
+def test_download_file_with_version_id(s3_clients, tmp_path):
+    """Test that download_file works with VersionId in ExtraArgs and returns metadata."""
+    boto_client, light_client = s3_clients
+
+    # Create a test object with versioning (if supported by the backend)
+    file_content = b"test content with version"
+    key = "download-version-test.txt"
+    response = boto_client.put_object(Body=file_content, Bucket=BUCKET_NAME, Key=key)
+    version_id = response.get("VersionId")
+
+    if version_id:  # Only test if versioning is enabled
+        local_file = tmp_path / "downloaded_version_test.txt"
+        metadata = light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key=key,
+            Filename=str(local_file),
+            ExtraArgs={"VersionId": version_id},
+        )
+        assert local_file.exists()
+        assert local_file.read_bytes() == file_content
+        assert metadata["ContentLength"] == len(file_content)
+        assert metadata.get("VersionId") == version_id
+
+
+def test_download_file_missing_key(s3_clients, tmp_path):
+    """Test that download_file raises NoSuchKeyError for missing object."""
+    _boto_client, light_client = s3_clients
+    from signurlarity.exceptions import NoSuchKeyError
+
+    local_file = tmp_path / "nonexistent.txt"
+    with pytest.raises(NoSuchKeyError):
+        light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="nonexistent_key.txt",
+            Filename=str(local_file),
+        )
+
+
+def test_download_file_missing_bucket(s3_clients, tmp_path):
+    """Test that download_file raises NoSuchBucketError for missing bucket."""
+    _boto_client, light_client = s3_clients
+    from signurlarity.exceptions import NoSuchKeyError
+
+    local_file = tmp_path / "missing_bucket.txt"
+    with pytest.raises(NoSuchKeyError):
+        light_client.download_file(
+            Bucket="not-existing-bucket",
+            Key="key.txt",
+            Filename=str(local_file),
+        )
+
+
+def test_download_file_missing_bucket_param(s3_clients, tmp_path):
+    """Test that download_file raises PresignError when Bucket is missing."""
+    _boto_client, light_client = s3_clients
+    from signurlarity.exceptions import PresignError
+
+    local_file = tmp_path / "missing_bucket_param.txt"
+    with pytest.raises(PresignError):
+        light_client.download_file(
+            Bucket="",
+            Key="key.txt",
+            Filename=str(local_file),
+        )
+
+
+def test_download_file_missing_key_param(s3_clients, tmp_path):
+    """Test that download_file raises PresignError when Key is missing."""
+    _boto_client, light_client = s3_clients
+    from signurlarity.exceptions import PresignError
+
+    local_file = tmp_path / "missing_key_param.txt"
+    with pytest.raises(PresignError):
+        light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="",
+            Filename=str(local_file),
+        )
+
+
+def test_download_file_missing_filename_param(s3_clients):
+    """Test that download_file raises PresignError when Filename is missing."""
+    _boto_client, light_client = s3_clients
+    from signurlarity.exceptions import PresignError
+
+    with pytest.raises(PresignError):
+        light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="key.txt",
+            Filename="",
+        )
+
+
 # @pytest.fixture()
 # def fix_1():
 #     print("entering fix 1")
