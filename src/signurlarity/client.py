@@ -560,3 +560,67 @@ class Client(_BaseClient):
         url, signed_headers = self._prepare_delete_bucket(Bucket, **kwargs)
         response = self._execute_request("DELETE", url, signed_headers)
         return self._parse_delete_bucket_response(response, Bucket)
+
+    def download_file(
+        self,
+        Bucket: str,
+        Key: str,
+        Filename: str,
+        ExtraArgs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Download a file from S3 to a local path.
+
+        Performs a signed GET request to S3 and streams the response directly to a local file.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            Key: Object key (path in bucket) (required)
+            Filename: Local file path to save the downloaded content (required)
+            ExtraArgs: Optional dict of additional arguments (e.g., VersionId)
+
+        Returns:
+            Dictionary with response metadata, including:
+                - ContentLength: Size of the object in bytes
+                - LastModified: Last modification time
+                - ETag: Entity tag
+                - ContentType: MIME type (if available)
+                - VersionId: Version ID (if versioning is enabled)
+                - ResponseMetadata: HTTP status code and headers
+
+        Raises:
+            PresignError: If required parameters are missing or the download fails
+            OSError: If the local file cannot be written
+            NoSuchKeyError: If the object does not exist
+            NoSuchBucketError: If the bucket does not exist or is inaccessible
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Key:
+            raise PresignError("Missing required parameter 'Key'")
+        if not Filename:
+            raise PresignError("Missing required parameter 'Filename'")
+
+        # Prepare the request
+        url, signed_headers = self._prepare_get_object(Bucket, Key, **(ExtraArgs or {}))
+
+        try:
+            with self._http_client.stream(
+                "GET", url, headers=signed_headers
+            ) as response:
+                # Parse/validate the response and extract metadata
+                metadata = self._parse_get_object_response(response, Bucket, Key)
+
+                # Stream the response to the local file
+                with open(Filename, "wb") as f:  # noqa: PTH123
+                    for chunk in response.iter_bytes():
+                        f.write(chunk)
+
+                return metadata
+
+        except httpx2.HTTPError as e:
+            raise PresignError(f"Failed to download file: {str(e)}") from e
+        except OSError as e:
+            raise PresignError(
+                f"Failed to write to local file '{Filename}': {str(e)}"
+            ) from e
