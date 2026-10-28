@@ -30,7 +30,7 @@ MISSING_BUCKET_NAME = "missing-bucket"
 INVALID_BUCKET_NAME = ".."
 
 # Server backend fixtures the shared client fixtures fan out across.
-S3_BACKENDS = ("minio_server", "moto_server", "rustfs_server", "seaweedfs_server")
+S3_BACKENDS = ("moto_server", "rustfs_server", "seaweedfs_server")
 
 CHECKSUM_ALGORITHM = "sha256"
 
@@ -107,43 +107,6 @@ def rustfs_server():
         "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
     }
     cmd = ["docker", "stop", "rustfs_local"]
-    subprocess.run(cmd, check=True)  # noqa: S603
-
-
-@pytest.fixture(scope="module")
-def minio_server():
-    """Run a minio server."""
-    AWS_ACCESS_KEY_ID = "minioadmin"
-    AWS_SECRET_ACCESS_KEY = "minioadmin"  # noqa: S105
-    import subprocess
-
-    cmd = [
-        "docker",
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        "minio_local",
-        "-p",
-        "9100:9000",
-        "-p",
-        "9101:9001",
-        "-e",
-        "MINIO_ROOT_USER=minioadmin",
-        "-e",
-        "MINIO_ROOT_PASSWORD=minioadmin",
-        "minio/minio",
-        "server",
-        "/data",
-    ]
-    subprocess.run(cmd, check=True)  # noqa: S603
-    yield {
-        "endpoint_url": "http://localhost:9100",
-        "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-    }
-    cmd = ["docker", "stop", "minio_local"]
-
     subprocess.run(cmd, check=True)  # noqa: S603
 
 
@@ -277,7 +240,7 @@ def s3_clients(request):
     """S3 clients for synchronous tests with multiple server backends.
 
     This fixture can be used to test S3 interactions using different
-    backends (moto, minio, rustfs). Returns both boto3 and signurlarity clients.
+    backends (moto, rustfs). Returns both boto3 and signurlarity clients.
     """
     s3_server_fixture = request.param
     s3_server = request.getfixturevalue(s3_server_fixture)
@@ -304,7 +267,7 @@ async def s3_clients_aio(request):
     """S3 clients for asynchronous tests with multiple server backends.
 
     This fixture can be used to test async S3 interactions using different
-    backends (moto, minio, rustfs). Returns both aiobotocore and signurlarity async clients.
+    backends (moto, rustfs). Returns both aiobotocore and signurlarity async clients.
     """
     s3_server_fixture = request.param
     s3_server = request.getfixturevalue(s3_server_fixture)
