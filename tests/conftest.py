@@ -95,7 +95,7 @@ def rustfs_server():
         "9000:9000",
         "-p",
         "9001:9001",
-        "rustfs/rustfs:1.0.0-alpha.82",
+        "rustfs/rustfs:1.0.3",
         "/data",
     ]
     # print(shlex.join(cmd))
