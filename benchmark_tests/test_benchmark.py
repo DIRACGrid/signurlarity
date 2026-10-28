@@ -813,3 +813,75 @@ def test_upload_file_perf_sync(rustfs_server, test_results_dir):
 
     result_file.write_text(json.dumps(results, indent=2))
     print("=" * 60)
+
+
+def test_download_file_perf_sync(rustfs_server, test_results_dir):
+    """Benchmark boto3 vs Signurlarity for download_file (manual cleanup)."""
+    py_vers = sys.version_info
+    test_dir = test_results_dir / Path("test_download_file_perf")
+    os.makedirs(test_dir, exist_ok=True)
+    result_file = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+
+    # Setup
+    boto_client = boto3.client("s3", **rustfs_server)
+    light_client = Client(**rustfs_server)
+    bucket = "perf-bucket"
+    key = "perf-file.txt"
+    file_content = b"x" * 1024  # 1KB test file
+
+    # Create bucket and upload test file
+    boto_client.create_bucket(Bucket=bucket)
+    boto_client.put_object(Body=file_content, Bucket=bucket, Key=key)
+
+    iterations = 100
+    local_file = test_results_dir / Path("perf-downloaded-file.txt")
+
+    # Warm-up
+    for _ in range(10):
+        boto_client.download_file(Bucket=bucket, Key=key, Filename=local_file)
+    for _ in range(10):
+        light_client.download_file(Bucket=bucket, Key=key, Filename=local_file)
+
+    # Benchmark
+    def run_boto(n: int):
+        for _ in range(n):
+            boto_client.download_file(Bucket=bucket, Key=key, Filename=local_file)
+
+    def run_custom(n: int):
+        for _ in range(n):
+            light_client.download_file(Bucket=bucket, Key=key, Filename=local_file)
+
+    t_boto = _timeit(run_boto, iterations)
+    t_custom = _timeit(run_custom, iterations)
+
+    light_client.close()
+    results = {
+        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "tested_method": "download_file_sync",
+        "iterations": iterations,
+        "boto_total": t_boto,
+        "signurlarity_total": t_custom,
+        "boto_ops": iterations / t_boto,
+        "signurlarity_ops": iterations / t_custom,
+        "speedup": t_boto / t_custom,
+    }
+
+    print("\n" + "=" * 60)
+    print("DOWNLOAD FILE BENCHMARK")
+    print("=" * 60)
+    print(
+        f"boto3 download_file: {t_boto:.4f}s for {iterations} ops ({iterations / t_boto:.0f} ops/s)"
+    )
+    print(
+        f"signurlarity download_file: {t_custom:.4f}s for {iterations} ops ({iterations / t_custom:.0f} ops/s)"
+    )
+    if t_custom > 0:
+        speedup = t_boto / t_custom
+        print(f"relative speed (signurlarity vs boto3): {speedup:.2f}x")
+        if speedup > 1:
+            print(f"✓ Signurlarity implementation is {speedup:.2f}x FASTER!")
+        else:
+            print(f"boto3 is {1 / speedup:.2f}x faster")
+    print("=" * 60)
+
+    result_file.write_text(json.dumps(results, indent=2))
