@@ -16,8 +16,8 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
-    - uses: actions/setup-python@v6
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v7
       with:
         python-version: 3.x
     - uses: pre-commit/action@v3.0.1
@@ -37,7 +37,7 @@ jobs:
           - py314
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - uses: prefix-dev/setup-pixi@v0.9.3
         with:
           run-install: false
@@ -70,7 +70,7 @@ jobs:
           - py314
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - uses: prefix-dev/setup-pixi@v0.9.3
         with:
           run-install: false
@@ -89,7 +89,7 @@ jobs:
       - name: Run pytest
         run: pixi run -e ${{ matrix.python-version }} benchmark --test-results-dir ${{ runner.temp }}/perf_tests/
       - name: Upload perf test result
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: perf-results-${{ matrix.python-version }}
           path: ${{ runner.temp }}/perf_tests/*
@@ -102,7 +102,7 @@ jobs:
       contents: read
     steps:
       - name: Download math result for job 1
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/perf_tests/
           merge-multiple: true
@@ -111,7 +111,7 @@ jobs:
       - name: display content
         run: find ${{ runner.temp }}/perf_tests/ -name '*json' -exec cat {} \;
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - uses: prefix-dev/setup-pixi@v0.9.3
         with:
           run-install: false
@@ -128,7 +128,7 @@ jobs:
           pixi run -e py314 display-benchmark-comparison --test-results-dir ${{ runner.temp }}/perf_tests/ --md-output ${{ runner.temp }}/perf_tests/pretty.md
       - name: Upload perf comparison data
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: perf-comment
           path: ${{ runner.temp }}/perf_tests/
