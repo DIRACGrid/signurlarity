@@ -66,22 +66,15 @@
       "labels": ["dependencies", "testing"]
     },
     {
-      "description": "rustfs w/o -glibc",
+      "description": "rustfs - only stable releases (ignores alpha, beta, glibc)",
       "matchDepNames": ["rustfs/rustfs"],
-      "matchCurrentVersion": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?$/",
-      "allowedVersions": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?$/"
-    },
-    {
-      "description": "rustfs w/ -glibc",
-      "matchDepNames": ["rustfs/rustfs"],
-      "matchCurrentVersion": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?(-glibc)$/",
-      "allowedVersions": "/\\d+(\\.\\d+(\\.\\d+(-\\w+\\.\\d+)?)?)?(-glibc)$/"
+      "allowedVersions": "/^\\d+(\\.\\d+)+$/"
     }
   ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/tests/conftest\\.py$/"],
+      "managerFilePatterns": ["**/conftest\\.py$"],
       "matchStrings": [
         "rustfs/rustfs:(?<currentValue>[\\w.-]+)"
       ],
