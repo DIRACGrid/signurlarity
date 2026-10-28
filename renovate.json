@@ -74,7 +74,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["**/conftest\\.py$"],
+      "managerFilePatterns": ["/(^|/)conftest\\.py$/"],
       "matchStrings": [
         "rustfs/rustfs:(?<currentValue>[\\w.-]+)"
       ],
