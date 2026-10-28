@@ -7,7 +7,7 @@ Fast, lightweight S3 client focused on presigned URL generation. SignURLarity pr
 - **Fast presigned URL generation** (faster than boto3)
 - **Async support** with `AsyncClient`
 - **Connection pooling** for better performance
-- **S3-compatible services** (AWS S3, MinIO, etc.)
+- **S3-compatible services** (AWS S3, etc.)
 
 ## Performance
 
@@ -99,7 +99,7 @@ Please refer to the docstrings in the source code:
 [installation pixi](https://pixi.sh/latest/advanced/installation/)
 
 This will run functionnal tests.
-It will spawn docker container to test against `rustfs`, `minio` and `moto`
+It will spawn docker container to test against `rustfs` and `moto`
 
 ```bash
 pixi run unit-test # add any pytest option you want

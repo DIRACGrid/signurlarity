@@ -86,7 +86,7 @@ def test_head_object_exists(s3_clients):
 def test_head_object_special_chars(s3_clients, key):
     """head_object must work for keys with chars that require percent-encoding.
 
-    A signature-validating backend (minio, rustfs) percent-encodes the request
+    A signature-validating backend (rustfs) percent-encodes the request
     path per the SigV4 spec before recomputing the signature, so the canonical
     URI we sign must be encoded the same way. Keys containing ':', spaces or '+'
     previously produced a SignatureDoesNotMatch -> 403.

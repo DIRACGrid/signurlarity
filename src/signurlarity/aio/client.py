@@ -22,7 +22,6 @@ class AsyncClient(_BaseClient):
     Args:
         endpoint_url: S3 endpoint URL. Examples:
                      - AWS: 'https://s3.amazonaws.com' or 'https://s3.us-west-2.amazonaws.com'
-                     - MinIO: 'http://localhost:9000'
                      - Custom S3-compatible services
         aws_access_key_id: AWS access key ID for authentication
         aws_secret_access_key: AWS secret access key for authentication
@@ -52,20 +51,6 @@ class AsyncClient(_BaseClient):
         ...     url = await client.generate_presigned_url(
         ...         "get_object",
         ...         Params={"Bucket": "mybucket", "Key": "mykey"},
-        ...         ExpiresIn=3600,
-        ...     )
-
-        >>> # Using with MinIO or other S3-compatible services
-        >>> async with AsyncClient(
-        ...     endpoint_url="http://localhost:9000",
-        ...     aws_access_key_id="minioadmin",
-        ...     aws_secret_access_key="minioadmin",
-        ... ) as client:
-        ...     # Perform S3 operations asynchronously
-        ...     await client.create_bucket(Bucket="test-bucket")
-        ...     url = await client.generate_presigned_url(
-        ...         "put_object",
-        ...         Params={"Bucket": "test-bucket", "Key": "upload.txt"},
         ...         ExpiresIn=3600,
         ...     )
 

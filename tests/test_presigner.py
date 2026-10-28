@@ -1,7 +1,7 @@
 """Unit tests for request-path encoding (no live backend / Docker required).
 
 These lock the SigV4 canonical-URI encoding so a regression is caught in CI even
-when no signature-validating backend (minio/rustfs) is available. The signed
+when no signature-validating backend (rustfs) is available. The signed
 canonical URI and the wire URL are both built from the single ``path`` returned
 by ``_build_request_url``; if that path is not percent-encoded the same way a
 backend re-encodes it, head_object fails with SignatureDoesNotMatch.
