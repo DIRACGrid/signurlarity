@@ -886,3 +886,104 @@ class _BaseClient:
         }
 
         return result
+
+    def _prepare_get_object(
+        self, Bucket: str, Key: str, **kwargs
+    ) -> tuple[str, dict[str, str]]:
+        """Validate and build a signed GET object request.
+
+        Args:
+            Bucket: S3 bucket name (required)
+            Key: Object key (path in bucket) (required)
+            **kwargs: Additional arguments (e.g., VersionId)
+
+        Returns:
+            Tuple of (url, signed_headers)
+
+        Raises:
+            PresignError: If required parameters are missing
+
+        """
+        if not Bucket:
+            raise PresignError("Missing required parameter 'Bucket'")
+        if not Key:
+            raise PresignError("Missing required parameter 'Key'")
+
+        base_url, path, headers = self._build_request_url(Bucket, Key)
+
+        query_params = {}
+        if "VersionId" in kwargs:
+            query_params["versionId"] = kwargs["VersionId"]
+
+        query_string = self._build_query_string(query_params) if query_params else ""
+
+        signed_headers = self._presigner.sign_request_headers(
+            method="GET",
+            path=path,
+            headers=headers,
+            body=b"",
+            query_string=query_string,
+        )
+
+        url = base_url + path
+        if query_string:
+            url = f"{url}?{query_string}"
+
+        return url, signed_headers
+
+    def _parse_get_object_response(
+        self, response: httpx2.Response, Bucket: str, Key: str
+    ) -> dict[str, Any]:
+        """Parse GET object response, raising on errors.
+
+        Args:
+            response: HTTP response object
+            Bucket: S3 bucket name
+            Key: Object key
+
+        Returns:
+            Dictionary with response metadata (headers only, since the body is streamed separately).
+            Includes:
+                - ContentLength: Size of the object in bytes
+                - LastModified: Last modification time
+                - ETag: Entity tag
+                - ContentType: MIME type (if available)
+                - VersionId: Version ID (if versioning is enabled)
+                - ResponseMetadata: HTTP status code and headers
+
+        Raises:
+            NoSuchKeyError: If the object does not exist
+            PresignError: If access is denied or other errors occur
+
+        """
+        if response.status_code == 404:
+            raise NoSuchKeyError(
+                f"Object '{Key}' in bucket '{Bucket}' does not exist or is not accessible"
+            )
+        elif response.status_code == 403:
+            raise PresignError(
+                f"Access denied to object '{Key}' in bucket '{Bucket}'. Check credentials and permissions."
+            )
+        elif response.status_code == 400:
+            raise PresignError(f"Bad request for object '{Key}': {response.text}")
+        elif response.status_code != 200:
+            raise PresignError(
+                f"GET request failed with status {response.status_code}: {response.text}"
+            )
+
+        result: dict[str, Any] = {
+            "ContentLength": int(response.headers.get("content-length", 0)),
+            "LastModified": response.headers.get("last-modified"),
+            "ETag": response.headers.get("etag"),
+            "ResponseMetadata": {
+                "HTTPStatusCode": response.status_code,
+                "HTTPHeaders": dict(response.headers),
+            },
+        }
+
+        if "content-type" in response.headers:
+            result["ContentType"] = response.headers.get("content-type")
+        if "x-amz-version-id" in response.headers:
+            result["VersionId"] = response.headers.get("x-amz-version-id")
+
+        return result

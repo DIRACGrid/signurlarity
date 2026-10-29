@@ -727,3 +727,173 @@ async def test_delete_bucket_not_empty_aio(s3_clients_aio):
     # Try to delete non empty bucket
     with pytest.raises(PresignError):
         await async_light_client.delete_bucket(Bucket=BUCKET_NAME)
+
+
+@pytest.mark.asyncio
+async def test_download_file_aio(s3_clients_aio, tmp_path):
+    """Test that download_file downloads an object to a local file (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    # Create a test object in S3
+    file_content = b"test content for download_file async"
+    key = "download-test-aio.txt"
+    await boto_client.put_object(
+        Body=file_content, Bucket=BUCKET_NAME, Key=key, ContentType="text/plain"
+    )
+
+    # Define local path
+    local_file = tmp_path / "downloaded_test_aio.txt"
+
+    # Download the file and capture metadata
+    metadata = await async_light_client.download_file(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Filename=str(local_file),
+    )
+
+    # Verify the file was downloaded correctly
+    assert local_file.exists()
+    assert local_file.read_bytes() == file_content
+
+    # Verify the returned metadata
+    assert "ContentLength" in metadata
+    assert metadata["ContentLength"] == len(file_content)
+    assert "ETag" in metadata
+    assert "LastModified" in metadata
+    assert "ResponseMetadata" in metadata
+    assert metadata["ResponseMetadata"]["HTTPStatusCode"] == 200
+    assert metadata.get("ContentType") == "text/plain"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key",
+    [
+        "diracAdmin/admin/admin/sha256:abc123.tar.zst",
+        "with space/file.txt",
+        "plus+sign/file.txt",
+        "question?file.txt",
+        "hash#file.txt",
+        "percent%file.txt",
+    ],
+)
+async def test_download_file_special_chars_key_aio(s3_clients_aio, tmp_path, key):
+    """Test that download_file works for keys with special characters (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    file_content = b"special chars test content async"
+    await boto_client.put_object(Body=file_content, Bucket=BUCKET_NAME, Key=key)
+
+    # Sanity: the key is legal on the backend
+    await boto_client.head_object(Bucket=BUCKET_NAME, Key=key)
+
+    local_file = tmp_path / f"special_{key.replace('/', '_').replace(':', '_')}.txt"
+    metadata = await async_light_client.download_file(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Filename=str(local_file),
+    )
+
+    assert local_file.exists()
+    assert local_file.read_bytes() == file_content
+    assert metadata["ContentLength"] == len(file_content)
+
+
+@pytest.mark.asyncio
+async def test_download_file_with_version_id_aio(s3_clients_aio, tmp_path):
+    """Test that download_file works with VersionId in ExtraArgs (async)."""
+    boto_client, async_light_client = s3_clients_aio
+
+    file_content = b"test content with version async"
+    key = "download-version-test-aio.txt"
+    response = await boto_client.put_object(
+        Body=file_content, Bucket=BUCKET_NAME, Key=key
+    )
+    version_id = response.get("VersionId")
+
+    if version_id:  # Only test if versioning is enabled
+        local_file = tmp_path / "downloaded_version_test_aio.txt"
+        metadata = await async_light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key=key,
+            Filename=str(local_file),
+            ExtraArgs={"VersionId": version_id},
+        )
+        assert local_file.exists()
+        assert local_file.read_bytes() == file_content
+        assert metadata["ContentLength"] == len(file_content)
+        assert metadata.get("VersionId") == version_id
+
+
+@pytest.mark.asyncio
+async def test_download_file_missing_key_aio(s3_clients_aio, tmp_path):
+    """Test that download_file raises NoSuchKeyError for missing object (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import NoSuchKeyError
+
+    local_file = tmp_path / "nonexistent_aio.txt"
+    with pytest.raises(NoSuchKeyError):
+        await async_light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="nonexistent_key_aio.txt",
+            Filename=str(local_file),
+        )
+
+
+@pytest.mark.asyncio
+async def test_download_file_missing_bucket_aio(s3_clients_aio, tmp_path):
+    """Test that download_file raises NoSuchKeyError for missing bucket (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import NoSuchKeyError
+
+    local_file = tmp_path / "missing_bucket_aio.txt"
+    with pytest.raises(NoSuchKeyError):
+        await async_light_client.download_file(
+            Bucket=MISSING_BUCKET_NAME,
+            Key="key_aio.txt",
+            Filename=str(local_file),
+        )
+
+
+@pytest.mark.asyncio
+async def test_download_file_missing_bucket_param_aio(s3_clients_aio, tmp_path):
+    """Test that download_file raises PresignError when Bucket is missing (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import PresignError
+
+    local_file = tmp_path / "missing_bucket_param_aio.txt"
+    with pytest.raises(PresignError):
+        await async_light_client.download_file(
+            Bucket="",
+            Key="key_aio.txt",
+            Filename=str(local_file),
+        )
+
+
+@pytest.mark.asyncio
+async def test_download_file_missing_key_param_aio(s3_clients_aio, tmp_path):
+    """Test that download_file raises PresignError when Key is missing (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import PresignError
+
+    local_file = tmp_path / "missing_key_param_aio.txt"
+    with pytest.raises(PresignError):
+        await async_light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="",
+            Filename=str(local_file),
+        )
+
+
+@pytest.mark.asyncio
+async def test_download_file_missing_filename_param_aio(s3_clients_aio):
+    """Test that download_file raises PresignError when Filename is missing (async)."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import PresignError
+
+    with pytest.raises(PresignError):
+        await async_light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="key_aio.txt",
+            Filename="",
+        )
