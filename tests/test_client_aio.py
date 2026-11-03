@@ -897,3 +897,21 @@ async def test_download_file_missing_filename_param_aio(s3_clients_aio):
             Key="key_aio.txt",
             Filename="",
         )
+
+
+@pytest.mark.asyncio
+async def test_download_file_invalid_version_id(s3_clients_aio, tmp_path):
+    """400 Bad Request when versionId is malformed (real rustfs/S3 behavior)."""
+    _boto_client, async_light_client = s3_clients_aio
+    from signurlarity.exceptions import NoSuchKeyError, PresignError
+
+    local_file = tmp_path / "invalid_version.txt"
+    # need to raise both error here since
+    # different servers return 400 (rustfs/AWS) or 404 (moto/seaweedfs)
+    with pytest.raises((PresignError, NoSuchKeyError)):
+        await async_light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="version-test.txt",
+            Filename=str(local_file),
+            ExtraArgs={"VersionId": "not-a-valid-uuid"},  # Malformed → 400
+        )

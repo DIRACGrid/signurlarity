@@ -965,8 +965,10 @@ class _BaseClient:
                 f"Access denied to object '{Key}' in bucket '{Bucket}'. Check credentials and permissions."
             )
         elif response.status_code == 400:
+            response.read()
             raise PresignError(f"Bad request for object '{Key}': {response.text}")
         elif response.status_code != 200:
+            response.read()
             raise PresignError(
                 f"GET request failed with status {response.status_code}: {response.text}"
             )

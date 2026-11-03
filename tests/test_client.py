@@ -839,6 +839,23 @@ def test_download_file_missing_filename_param(s3_clients):
         )
 
 
+def test_download_file_invalid_version_id(s3_clients, tmp_path):
+    """400 Bad Request when versionId is malformed (real rustfs/S3 behavior)."""
+    _boto_client, light_client = s3_clients
+    from signurlarity.exceptions import NoSuchKeyError, PresignError
+
+    local_file = tmp_path / "invalid_version.txt"
+    # need to raise both error here since
+    # different servers return 400 (rustfs/AWS) or 404 (moto/seaweedfs)
+    with pytest.raises((PresignError, NoSuchKeyError)):
+        light_client.download_file(
+            Bucket=BUCKET_NAME,
+            Key="version-test.txt",
+            Filename=str(local_file),
+            ExtraArgs={"VersionId": "not-a-valid-uuid"},  # Malformed → 400
+        )
+
+
 # @pytest.fixture()
 # def fix_1():
 #     print("entering fix 1")

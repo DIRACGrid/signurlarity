@@ -623,6 +623,8 @@ class AsyncClient(_BaseClient):
             async with self._http_client.stream(
                 "GET", url, headers=signed_headers
             ) as response:
+                if response.status_code != 200:
+                    await response.aread()
                 # Parse/validate the response and extract metadata (synchronous)
                 metadata = self._parse_get_object_response(response, Bucket, Key)
 
