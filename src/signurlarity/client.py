@@ -588,8 +588,7 @@ class Client(_BaseClient):
                 - ResponseMetadata: HTTP status code and headers
 
         Raises:
-            PresignError: If required parameters are missing or the download fails
-            OSError: If the local file cannot be written
+            PresignError: If required parameters are missing or the download fails or the local file cannot be written
             NoSuchKeyError: If the object does not exist
             NoSuchBucketError: If the bucket does not exist or is inaccessible
 
