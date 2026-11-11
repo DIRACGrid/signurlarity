@@ -41,11 +41,6 @@ jobs:
     name: Build distribution 📦
     needs: release-please
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/signurlarity
-    permissions:
-      id-token: write  # trusted publishing
     # !cancelled(): run even when release-please was skipped (manual run).
     if: >-
       !cancelled() && (
@@ -70,5 +65,29 @@ jobs:
         python -m readme_renderer README.md -o /tmp/README.html
     - name: Build a binary wheel and a source tarball
       run: python3 -m build
+    - name: Store the distribution packages
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: python-package-distributions
+        path: dist/
+
+  # Only this job can get a PyPI token; the build above runs without it.
+  publish:
+    name: Publish distribution 📦 to PyPI
+    needs: build
+    # A skipped release-please upstream would otherwise skip this job too.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/signurlarity
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+    - name: Download the distribution packages
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: python-package-distributions
+        path: dist/
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
