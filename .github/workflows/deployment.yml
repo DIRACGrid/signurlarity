@@ -1,19 +1,28 @@
-name: Publish Python 🐍 distribution 📦 to PyPI
+name: Release
 
 on:
   push:
     branches:
       - master
+  # Re-publish an existing tag after a failed publish. Run from master (pypi env).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish (e.g. v0.1.0)
+        required: true
+
+# Don't cancel: a queued run may be waiting on pypi approval.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  # Opens/updates the release PR; once that PR is merged, creates the tag and the
-  # GitHub release. It uses the job's own short-lived token, not a stored PAT.
-  # Nothing done with that token starts another workflow, so publishing happens
-  # in this workflow, gated on release_created (same layout as diracx-web).
+  # Tags created with GITHUB_TOKEN trigger no workflows, so publish happens here.
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,7 +35,6 @@ jobs:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
         with:
-          token: ${{ github.token }}
           release-type: simple
 
   build:
@@ -37,13 +45,18 @@ jobs:
       name: pypi
       url: https://pypi.org/p/signurlarity
     permissions:
-      id-token: write  # IMPORTANT: mandatory for trusted publishing
-    if: needs.release-please.outputs.release_created == 'true'
+      id-token: write  # trusted publishing
+    # !cancelled(): run even when release-please was skipped (manual run).
+    if: >-
+      !cancelled() && (
+        needs.release-please.outputs.release_created == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      )
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:
-        # Build the release tag itself so hatch-vcs reads the release version.
-        ref: ${{ needs.release-please.outputs.tag_name }}
+        # hatch-vcs needs the tag to compute the version.
+        ref: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
         persist-credentials: false
     - name: Set up Python
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -51,13 +64,7 @@ jobs:
         python-version: "3.15"
     - name: Installing dependencies
       run: |
-          python -m pip install \
-              build \
-              python-dateutil \
-              pytz \
-              readme_renderer[md] \
-              requests \
-              setuptools_scm
+          python -m pip install build "readme_renderer[md]"
     - name: Validate README for PyPI
       run: |
         python -m readme_renderer README.md -o /tmp/README.html
