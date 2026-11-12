@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 from typing import Any, Mapping, Optional
 from urllib.parse import urlencode, urlparse
@@ -19,6 +20,14 @@ from .exceptions import (
     PresignError,
 )
 from .presigner import S3Presigner
+
+tmp_client = httpx2.Client()
+DEFAULT_LIMITS = httpx2.Limits(
+    max_connections=tmp_client._transport._pool._max_connections,
+    max_keepalive_connections=tmp_client._transport._pool._max_keepalive_connections,
+    keepalive_expiry=tmp_client._transport._pool._keepalive_expiry,
+)
+del tmp_client
 
 
 class _BaseClient:
@@ -52,7 +61,8 @@ class _BaseClient:
         )
 
         # Build connection pool limits for subclasses
-        self._limits = httpx2._config.DEFAULT_LIMITS
+
+        self._limits = copy.deepcopy(DEFAULT_LIMITS)
         if max_connections:
             self._limits.max_connections = max_connections
 
