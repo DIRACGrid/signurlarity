@@ -52,9 +52,12 @@ class _BaseClient:
         )
 
         # Build connection pool limits for subclasses
-        self._limits = httpx2._config.DEFAULT_LIMITS
+        self._limits = None
         if max_connections:
-            self._limits.max_connections = max_connections
+            self._limits = httpx2.Limits(
+                max_connections=max_connections,
+                max_keepalive_connections=max_connections,
+            )
 
     def _extract_region(self, endpoint_url: str) -> str:
         """Extract AWS region from endpoint URL.
