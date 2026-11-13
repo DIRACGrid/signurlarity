@@ -1,20 +1,57 @@
-name: Publish Python 🐍 distribution 📦 to PyPI
+name: Release
 
-on: push
+on:
+  push:
+    branches:
+      - master
+  # Re-publish an existing tag after a failed publish. Run from master (pypi env).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish (e.g. v0.1.0)
+        required: true
+
+# Don't cancel: a queued run may be waiting on pypi approval.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
+  # Tags created with GITHUB_TOKEN trigger no workflows, so publish happens here.
+  release-please:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: release
+        with:
+          release-type: simple
+
   build:
     name: Build distribution 📦
+    needs: release-please
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/signurlarity
-    permissions:
-      id-token: write  # IMPORTANT: mandatory for trusted publishing
-    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
+    # !cancelled(): run even when release-please was skipped (manual run).
+    if: >-
+      !cancelled() && (
+        needs.release-please.outputs.release_created == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      )
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:
+        # hatch-vcs needs the tag to compute the version.
+        ref: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
         persist-credentials: false
     - name: Set up Python
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -22,17 +59,35 @@ jobs:
         python-version: "3.15"
     - name: Installing dependencies
       run: |
-          python -m pip install \
-              build \
-              python-dateutil \
-              pytz \
-              readme_renderer[md] \
-              requests \
-              setuptools_scm
+          python -m pip install build "readme_renderer[md]"
     - name: Validate README for PyPI
       run: |
         python -m readme_renderer README.md -o /tmp/README.html
     - name: Build a binary wheel and a source tarball
       run: python3 -m build
+    - name: Store the distribution packages
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: python-package-distributions
+        path: dist/
+
+  # Only this job can get a PyPI token; the build above runs without it.
+  publish:
+    name: Publish distribution 📦 to PyPI
+    needs: build
+    # A skipped release-please upstream would otherwise skip this job too.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/signurlarity
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+    - name: Download the distribution packages
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: python-package-distributions
+        path: dist/
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
