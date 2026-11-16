@@ -9,9 +9,6 @@
     "github-actions",
     "custom.regex"
   ],
-  "python": {
-    "rangeStrategy": "auto"
-  },
   "ignorePaths": [
     ".pixi/**",
     "**/__pycache__/**",
@@ -19,6 +16,13 @@
     "**/env/**"
   ],
   "packageRules": [
+    {
+      "description": "Python rangeStrategy (moved here from the deprecated top-level python option)",
+      "matchCategories": [
+        "python"
+      ],
+      "rangeStrategy": "auto"
+    },
     {
       "description": "Group all Python dependency updates together",
       "matchManagers": [
@@ -32,8 +36,18 @@
       ]
     },
     {
+      "description": "Python version requirements - be conservative",
+      "matchDatasources": [
+        "pypi"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "minimumReleaseAge": "30 days"
+    },
+    {
       "description": "Group build dependencies",
-      "matchPackagePatterns": [
+      "matchPackageNames": [
         "hatchling",
         "hatch-vcs"
       ],
@@ -45,8 +59,8 @@
     },
     {
       "description": "Group test dependencies",
-      "matchPackagePatterns": [
-        "pytest.*",
+      "matchPackageNames": [
+        "/^pytest/",
         "moto",
         "aiobotocore",
         "botocore"
