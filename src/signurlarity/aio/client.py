@@ -90,7 +90,11 @@ class AsyncClient(_BaseClient):
             aws_secret_access_key=aws_secret_access_key,
             max_connections=max_connections,
         )
-        self._http_client = httpx2.AsyncClient(limits=self._limits)
+
+        if self._limits:
+            self._http_client = httpx2.AsyncClient(limits=self._limits)
+        else:
+            self._http_client = httpx2.AsyncClient()
 
     async def _execute_request(
         self, method: str, url: str, headers: dict[str, str], body: bytes = b""
