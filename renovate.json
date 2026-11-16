@@ -1,10 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    "helpers:pinGitHubActionDigests"
+    "local>DIRACGrid/.github//renovate-config"
   ],
-  "minimumReleaseAge": "7 days",
   "enabledManagers": [
     "pip_requirements",
     "pep621",
@@ -22,60 +20,57 @@
   ],
   "packageRules": [
     {
-      "description": "Group all GitHub Actions updates together",
-      "matchManagers": ["github-actions"],
-      "groupName": "GitHub Actions",
-      "labels": ["dependencies", "github-actions"]
-    },
-    {
       "description": "Group all Python dependency updates together",
       "matchManagers": [
         "pip_requirements",
         "pep621"
       ],
       "groupName": "Python dependencies",
-      "labels": ["dependencies", "python"]
-    },
-    {
-      "description": "Handle major version updates separately",
-      "matchUpdateTypes": ["major"],
-      "groupName": "Major version updates",
-      "labels": ["breaking-change"],
-      "automerge": false
-    },
-    {
-      "description": "Handle minor and patch updates together",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
-      "automerge": false
-    },
-    {
-      "description": "Python version requirements - be conservative",
-      "matchDatasources": ["pypi"],
-      "matchUpdateTypes": ["major"],
-      "minimumReleaseAge": "30 days"
+      "labels": [
+        "dependencies",
+        "python"
+      ]
     },
     {
       "description": "Group build dependencies",
-      "matchPackagePatterns": ["hatchling", "hatch-vcs"],
+      "matchPackagePatterns": [
+        "hatchling",
+        "hatch-vcs"
+      ],
       "groupName": "Build dependencies",
-      "labels": ["dependencies", "build"]
+      "labels": [
+        "dependencies",
+        "build"
+      ]
     },
     {
       "description": "Group test dependencies",
-      "matchPackagePatterns": ["pytest.*", "moto", "aiobotocore", "botocore"],
+      "matchPackagePatterns": [
+        "pytest.*",
+        "moto",
+        "aiobotocore",
+        "botocore"
+      ],
       "groupName": "Testing dependencies",
-      "labels": ["dependencies", "testing"]
+      "labels": [
+        "dependencies",
+        "testing"
+      ]
     },
     {
       "description": "rustfs - only stable releases (ignores alpha, beta, glibc)",
-      "matchDepNames": ["rustfs/rustfs"],
+      "matchDepNames": [
+        "rustfs/rustfs"
+      ],
       "allowedVersions": "/^\\d+(\\.\\d+)+$/"
     }
   ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/(^|/)conftest\\.py$/"],
+      "managerFilePatterns": [
+        "/(^|/)conftest\\.py$/"
+      ],
       "matchStrings": [
         "rustfs/rustfs:(?<currentValue>[\\w.-]+)"
       ],
