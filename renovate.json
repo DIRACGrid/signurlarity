@@ -7,7 +7,9 @@
     "pip_requirements",
     "pep621",
     "github-actions",
-    "custom.regex"
+    "custom.regex",
+    "pre-commit",
+    "pixi"
   ],
   "ignorePaths": [
     ".pixi/**",
