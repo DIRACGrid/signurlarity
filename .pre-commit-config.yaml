@@ -49,3 +49,10 @@ repos:
           - types-aiobotocore[essential]
           - boto3-stubs[essential]
         exclude: tests
+
+  # static security analysis
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.9.4'
+    hooks:
+    - id: bandit
+      args: ["-q", "-c", "pyproject.toml"]

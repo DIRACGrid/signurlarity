@@ -196,3 +196,15 @@ depends-on = [
     "{{ test_results_dir }}",
   ] },
 ]
+
+[tool.bandit]
+exclude_dirs = [".github", "docs", "test", "tests"]
+skips = [
+  # Already assessed inline via ruff's bandit rules (noqa: S314 / S324):
+  # the XML is parsed from S3 API responses received over TLS, and
+  # Content-MD5 is mandated by the S3 delete_objects API.
+  "B405", # blacklist - ElementTree (see noqa: S314)
+  "B406", # blacklist - xml escape (see noqa: S314)
+  "B314", # blacklist - ElementTree.fromstring (see noqa: S314)
+  "B324", # hashlib - MD5 for the S3 Content-MD5 header (see noqa: S324)
+]
