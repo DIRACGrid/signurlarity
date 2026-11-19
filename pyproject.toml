@@ -159,16 +159,16 @@ profile-test = {cmd = "pytest -v profiling_tests/", description="Run profiling o
 
 
 [tool.pixi.feature.py311.dependencies]
-python = "3.11.*"
+python = "3.15.*"
 
 [tool.pixi.feature.py312.dependencies]
-python = "3.12.*"
+python = "3.15.*"
 
 [tool.pixi.feature.py313.dependencies]
-python = "3.13.*"
+python = "3.15.*"
 
 [tool.pixi.feature.py314.dependencies]
-python = "3.14.*"
+python = "3.15.*"
 
 
 [tool.pixi.tasks.full-benchmark]
