@@ -1,10 +1,7 @@
 name: Release
 
-# release-please (push to master) keeps the release PR up to date and, once it
-# is merged, creates a *draft* GitHub release. Draft releases have no tag yet.
-# A release manager reviews the draft and publishes it: that creates the tag
-# (allowed by the `tags` ruleset, which github-actions cannot pass) and, being
-# a human event, triggers the build and the PyPI publish below.
+# Merging the release PR creates a draft release; a release manager publishing
+# it creates the tag and triggers the build and publish below.
 on:
   push:
     branches:
@@ -18,9 +15,7 @@ on:
         description: Existing release tag to publish (e.g. v0.1.0)
         required: true
 
-# One group per event and ref: a push to master can never replace a queued
-# publish (GitHub keeps only one pending run per group), and nothing is
-# cancelled while it may be waiting on the pypi approval.
+# Per event and ref, so a push cannot replace a queued publish.
 concurrency:
   group: release-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
@@ -38,7 +33,6 @@ jobs:
       issues: write  # release labels
       pull-requests: write  # open and update the release PR
     steps:
-      # Settings (draft releases, pre-1.0 bumps) live in release-please-config.json.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
 
   build:
