@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.2](https://github.com/DIRACGrid/signurlarity/compare/v0.3.1...v0.3.2) (2026-11-19)
+
+
+### Features
+
+* download_file client ([#55](https://github.com/DIRACGrid/signurlarity/issues/55)) ([ded8268](https://github.com/DIRACGrid/signurlarity/commit/ded8268ca01f60173fca3ba2f324f450a826d3ae))
+
+
+### Bug Fixes
+
+* do not use private httpx._config for default limits ([#67](https://github.com/DIRACGrid/signurlarity/issues/67)) ([a0d9333](https://github.com/DIRACGrid/signurlarity/commit/a0d93337d14d887433ebb8e5ade2553369218934))
+* make renovate custom manager match conftest.py files ([#58](https://github.com/DIRACGrid/signurlarity/issues/58)) ([35fba3d](https://github.com/DIRACGrid/signurlarity/commit/35fba3deade990431d852981627c43778a89415d))
+* migrate from httpx to httpx2 ([#48](https://github.com/DIRACGrid/signurlarity/issues/48)) ([3d4050e](https://github.com/DIRACGrid/signurlarity/commit/3d4050e947aaa6447b2f023ea6578d83f45ed70c))
+* update httpcore logger name to httpcore2 ([#51](https://github.com/DIRACGrid/signurlarity/issues/51)) ([8d9421c](https://github.com/DIRACGrid/signurlarity/commit/8d9421c83228037472cd3696a82e77c6cf7363c6))
+
 ## [0.3.1](https://github.com/DIRACGrid/signurlarity/compare/v0.3.0...v0.3.1) (2026-06-18)
 
 
