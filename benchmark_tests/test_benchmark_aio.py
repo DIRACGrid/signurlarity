@@ -3,16 +3,14 @@ from __future__ import annotations
 import json
 import os
 import random
-import sys
 import tempfile
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from aiobotocore.session import get_session
 from botocore.client import Config
 
-from conftest import _timeit_async_helper
+from conftest import _benchmark_result_path, _timeit_async_helper
 from signurlarity.aio import AsyncClient
 
 
@@ -23,10 +21,7 @@ async def test_generate_presigned_post_perf_aio(rustfs_server, test_results_dir)
     This is a non-failing, informational test: it prints timings and skips
     if the signurlarity implementation is not available.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_generate_presigned_post_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_generate_presigned_post_perf_aio")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-bucket"
@@ -89,7 +84,7 @@ async def test_generate_presigned_post_perf_aio(rustfs_server, test_results_dir)
 
         await async_light_client.close()
         results = {
-            "python_version": f"{py_vers.major}.{py_vers.minor}",
+            "python_version": result_file.stem.removeprefix("run_"),
             "tested_method": "generate_presigned_post_aio",
             "iterations": iterations,
             "boto_total": t_boto,
@@ -109,10 +104,7 @@ async def test_generate_presigned_url_perf_aio(rustfs_server, test_results_dir):
 
     This benchmark tests the async implementation's presigned URL generation.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_generate_presigned_url_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_generate_presigned_url_perf_aio")
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-bucket"
     key = "object.txt"
@@ -162,7 +154,7 @@ async def test_generate_presigned_url_perf_aio(rustfs_server, test_results_dir):
 
         await async_light_client.close()
         results = {
-            "python_version": f"{py_vers.major}.{py_vers.minor}",
+            "python_version": result_file.stem.removeprefix("run_"),
             "tested_method": "generate_presigned_url_aio",
             "iterations": iterations,
             "boto_total": t_boto,
@@ -182,10 +174,7 @@ async def test_head_bucket_perf_aio(rustfs_server, test_results_dir):
 
     This benchmark tests the async implementation's head_bucket functionality.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_head_bucket_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_head_bucket_perf_aio")
     bucket = "perf-bucket"
 
     async_light_client = AsyncClient(**rustfs_server)
@@ -219,7 +208,7 @@ async def test_head_bucket_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "head_bucket_aio",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -238,10 +227,7 @@ async def test_head_object_perf_aio(rustfs_server, test_results_dir):
 
     This benchmark tests the async implementation's head_object functionality.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_head_object_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_head_object_perf_aio")
     bucket = "perf-object"
     key = "perf-object.txt"
 
@@ -277,7 +263,7 @@ async def test_head_object_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "head_object_aio",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -316,10 +302,7 @@ async def test_create_bucket_perf_aio(rustfs_server, test_results_dir):
 
     This benchmark tests the async implementation's create_bucket functionality.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_create_bucket_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_create_bucket_perf_aio")
 
     async_light_client = AsyncClient(**rustfs_server)
     session = get_session()
@@ -357,7 +340,7 @@ async def test_create_bucket_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "create_bucket_aio",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -396,10 +379,7 @@ async def test_delete_objects_perf_aio(rustfs_server, test_results_dir):
 
     This benchmark tests the async implementation's delete_objects functionality.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_delete_objects_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_delete_objects_perf_aio")
 
     bucket = "perf-delete-objects"
     num_keys = 10
@@ -452,7 +432,7 @@ async def test_delete_objects_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "delete_objects_aio",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -490,10 +470,7 @@ async def test_put_object_perf_aio(rustfs_server, test_results_dir):
 
     Uploads a 1 KB object per iteration to a unique key.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_put_object_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_put_object_perf_aio")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-put-object-aio"
@@ -539,7 +516,7 @@ async def test_put_object_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "put_object_aio",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -576,10 +553,7 @@ async def test_list_objects_perf_aio(rustfs_server, test_results_dir):
 
     Pre-populates 10 objects and benchmarks listing them with a prefix filter.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_list_objects_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_list_objects_perf_aio")
 
     bucket = "perf-list-objects-aio"
     prefix = "bench/"
@@ -616,7 +590,7 @@ async def test_list_objects_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "list_objects_aio",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -653,10 +627,7 @@ async def test_copy_object_perf_aio(rustfs_server, test_results_dir):
 
     Pre-uploads a source object and benchmarks copying it to unique destination keys.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_copy_object_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_copy_object_perf_aio")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-copy-object-aio"
@@ -707,7 +678,7 @@ async def test_copy_object_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "copy_object_aio",
         "iterations": iterations,
         "boto_total": t_boto,
@@ -745,10 +716,7 @@ async def test_upload_file_perf_aio(rustfs_server, test_results_dir):
     Uses a 1 KB temporary file and uploads to unique keys per iteration.
     aiobotocore has no upload_file; boto reference uses put_object with file read.
     """
-    py_vers = sys.version_info
-    test_dir = test_results_dir / Path("test_upload_file_perf_aio")
-    os.makedirs(test_dir, exist_ok=True)
-    result_file: Path = test_dir / Path(f"run_{py_vers.major}.{py_vers.minor}.json")
+    result_file = _benchmark_result_path(test_results_dir, "test_upload_file_perf_aio")
 
     rng = random.Random(42)  # noqa: S311
     bucket = "perf-upload-file-aio"
@@ -803,7 +771,7 @@ async def test_upload_file_perf_aio(rustfs_server, test_results_dir):
 
     await async_light_client.close()
     results = {
-        "python_version": f"{py_vers.major}.{py_vers.minor}",
+        "python_version": result_file.stem.removeprefix("run_"),
         "tested_method": "upload_file_aio",
         "iterations": iterations,
         "boto_total": t_boto,
