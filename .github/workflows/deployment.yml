@@ -24,16 +24,52 @@ permissions:
   contents: read
 
 jobs:
+  # Also runs when the draft is published, to open the next release PR.
   release-please:
     name: release-please
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'release'
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write  # release commit and draft GitHub release
       issues: write  # release labels
       pull-requests: write  # open and update the release PR
     steps:
+      # release-please ignores draft releases (they have no tag). Until the draft
+      # is published it would build the next release PR from the whole history.
+      - name: Check for an unpublished draft release
+        id: pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Always the default branch: a release or re-run SHA can be an older commit.
+          MANIFEST_REF: ${{ github.event.repository.default_branch }}
+        run: |
+          version="$(gh api "repos/$GITHUB_REPOSITORY/contents/.release-please-manifest.json?ref=$MANIFEST_REF" \
+            --jq .content | base64 -d | jq -er '."."')"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Unexpected version in .release-please-manifest.json: '$version'"
+            exit 1
+          fi
+          drafts="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.draft and .tag_name == \"v$version\") | .id")"
+          if [[ -n "$drafts" ]]; then
+            echo "::warning::Draft release v$version is not published yet: release-please skipped"
+            echo "draft=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Two calls: within one call the PR step cannot see the draft the release
+      # step just made.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: release
+        if: steps.pending.outputs.draft != 'true'
+        with:
+          skip-github-pull-request: true
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        if: steps.pending.outputs.draft != 'true' && steps.release.outputs.releases_created != 'true'
+        with:
+          skip-github-release: true
 
   build:
     name: Build distribution 📦
