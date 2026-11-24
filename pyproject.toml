@@ -27,8 +27,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/diracx/signurlarity"
-Repository = "https://github.com/diracx/signurlarity"
+Homepage = "https://diracgrid.org"
+Repository = "https://github.com/DIRACGrid/signurlarity"
+Issues = "https://github.com/DIRACGrid/signurlarity/issues"
+Security = "https://github.com/DIRACGrid/signurlarity/security/policy"
 
 
 [project.optional-dependencies]
